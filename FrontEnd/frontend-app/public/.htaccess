@@ -1,0 +1,37 @@
+# --- CACHE CONTROL PARA REACT/VITE ---
+
+<IfModule mod_headers.c>
+  # No cachear respuestas HTML de React/Vite
+  <FilesMatch "\.html$">
+    Header always set Cache-Control "no-cache, no-store, must-revalidate"
+    Header always set Pragma "no-cache"
+    Header always set Expires "0"
+  </FilesMatch>
+
+  # No cachear rutas SPA que devuelven HTML
+  Header always set Cache-Control "no-cache, no-store, must-revalidate" "expr=%{CONTENT_TYPE} =~ m#text/html#"
+  Header always set Pragma "no-cache" "expr=%{CONTENT_TYPE} =~ m#text/html#"
+  Header always set Expires "0" "expr=%{CONTENT_TYPE} =~ m#text/html#"
+
+  # Cachear assets con hash de Vite
+  <FilesMatch "\.(js|css|png|jpg|jpeg|gif|svg|ico|woff|woff2)$">
+    Header always set Cache-Control "public, max-age=31536000, immutable"
+  </FilesMatch>
+</IfModule>
+
+# --- FIN CACHE CONTROL ---
+
+
+# --- REACT ROUTER / VITE SPA ---
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    RewriteRule ^index\.html$ - [L]
+
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+
+    RewriteRule . /index.html [L]
+</IfModule>

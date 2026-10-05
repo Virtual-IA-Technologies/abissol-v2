@@ -1,0 +1,17 @@
+# Secrets and local environments
+.env
+.env.*
+!.env.example
+.venv/
+node_modules/
+__pycache__/
+*.py[cod]
+*.log
+*.tsbuildinfo
+dist/
+BackEnd/storage/
+.local/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

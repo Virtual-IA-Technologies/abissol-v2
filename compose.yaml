@@ -1,0 +1,48 @@
+name: abissol-v2
+services:
+  database:
+    image: mariadb:10.11
+    environment:
+      MARIADB_DATABASE: abissol_v2_local
+      MARIADB_USER: abissol
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD en .env de la raiz}
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Define DB_ROOT_PASSWORD en .env de la raiz}
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+  backend:
+    build: BackEnd
+    environment:
+      APP_ENV: development
+      DB_HOST: database
+      DB_NAME: abissol_v2_local
+      EXPECTED_DB_NAME: abissol_v2_local
+      DB_USER: abissol
+      DB_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD}
+      SECRET_KEY: ${SECRET_KEY:?Define SECRET_KEY en .env de la raiz}
+      FRONTEND_URL: http://localhost:5185
+      CORS_ORIGINS: http://localhost:5185
+      DOCUMENT_CLOUD_SCHEDULER: "false"
+    ports:
+      - "127.0.0.1:8015:8015"
+    volumes:
+      - storage:/workspace/BackEnd/storage
+      - ./docs:/workspace/docs:ro
+    depends_on:
+      database:
+        condition: service_healthy
+  frontend:
+    build: FrontEnd/frontend-app
+    environment:
+      VITE_API_URL: http://localhost:8015
+    ports:
+      - "127.0.0.1:5185:5185"
+    depends_on:
+      - backend
+volumes:
+  database:
+  storage:

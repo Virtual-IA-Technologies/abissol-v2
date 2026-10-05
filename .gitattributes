@@ -1,0 +1,8 @@
+.github/workflows/*.yml text eol=lf
+.githooks/* text eol=lf
+deployment/*.py text eol=lf
+deployment/*.sh text eol=lf
+deployment/*.service text eol=lf
+deployment/*.path text eol=lf
+deployment/*.timer text eol=lf
+docs/ia-agentica/05-BITACORA/*.md text merge=union

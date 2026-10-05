@@ -1,0 +1,15 @@
+alembic
+fastapi
+uvicorn
+SQLAlchemy
+PyMySQL
+python-jose
+bcrypt
+email_validator
+python-dotenv
+python-multipart
+cryptography
+httpx
+PyMuPDF
+
+python-docx==1.2.0
