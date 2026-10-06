@@ -6,12 +6,15 @@ Proyecto independiente con módulos comerciales ABISSOL en FastAPI y React.
 Piloto con datos reales migrados de ABISSOL Laravel: cuentas, red comercial,
 emisiones, liquidaciones, documentos e historial fiscal. Consulta de originales
 PDF/XML/CDR y configuración fiscal conservada; emisión electrónica nueva en V2
-pendiente de habilitación. Ver [Migración Laravel](docs/ia-agentica/03-MODULOS/MIGRACION_LARAVEL.md).
+implementada con cola persistente y validada en SUNAT Beta. Activación real pendiente
+de definir serie exclusiva V2 para no colisionar con Laravel. Ver
+[Facturación SUNAT](docs/ia-agentica/03-MODULOS/FACTURACION_SUNAT.md) y
+[Migración Laravel](docs/ia-agentica/03-MODULOS/MIGRACION_LARAVEL.md).
 
 Negocio: planes, red comercial, emisiones con carta/QR, comunicaciones salientes,
-liquidaciones, preparación de facturación y reportes. Sin OTP WhatsApp, bandeja
-de correo ni aprobaciones generales. Facturación electrónica SUNAT todavía no
-habilitada; los nuevos registros fiscales son borradores internos. El historial
+liquidaciones, boletas automáticas al registrar programas y reportes. Sin OTP WhatsApp,
+bandeja de correo ni aprobaciones generales. Configuración fiscal exclusiva del
+Programador; envío productivo inicialmente desactivado hasta definir numeración. El historial
 importado conserva sus estados originales. Alcance y configuración
 en [Negocio ABISSOL](docs/ia-agentica/03-MODULOS/NEGOCIO_ABISSOL.md).
 

@@ -59,6 +59,34 @@ SERVICE
 systemctl daemon-reload
 systemctl enable abissol-v2.service >/dev/null
 systemctl restart abissol-v2.service
+# A single durable fiscal worker processes only V2 jobs; no historical backfill.
+cat > /etc/systemd/system/abissol-v2-fiscal.service <<'FISCAL'
+[Unit]
+Description=ABISSOL V2 automatic boletas
+After=network.target mariadb.service
+[Service]
+Type=oneshot
+User=abissol
+Group=abissol
+WorkingDirectory=/home/abissol/apps/abissol-v2/current/BackEnd
+ExecStart=/home/abissol/apps/abissol-v2/.venv/bin/python scripts/fiscal_worker.py
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+TimeoutStartSec=20min
+FISCAL
+cat > /etc/systemd/system/abissol-v2-fiscal.timer <<'TIMER'
+[Unit]
+Description=Check ABISSOL V2 fiscal outbox
+[Timer]
+OnBootSec=1min
+OnUnitInactiveSec=1min
+[Install]
+WantedBy=timers.target
+TIMER
+systemctl daemon-reload
+systemctl enable --now abissol-v2-fiscal.timer >/dev/null
 ready=false
 for attempt in $(seq 1 20); do
   if curl -fsS http://127.0.0.1:8015/health/ready >/dev/null; then ready=true; break; fi

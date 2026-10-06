@@ -15,3 +15,4 @@ from .settings import AviSetting, AviThread, MessageTemplateSetting, SmtpSetting
 from .ubigeo import Ubigeo
 from .medical import MedicalPlan, MedicalSource, MedicalProfile, MedicalIssuance, MedicalLiquidation, MedicalLiquidationItem, MedicalVoucher, MedicalInvoice, MedicalDispatch
 from .legacy import LegacyRecord, LegacyFile, MedicalBillingConfiguration
+from .fiscal import FiscalJob

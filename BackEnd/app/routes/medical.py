@@ -32,6 +32,10 @@ from ..services.access_control import require_access, ensure_option_access
 from ..services.email import send_email
 from ..services.whatsapp import send_whatsapp
 from ..services.commercial_roles import seed_commercial_roles, ROLE_NAMES
+from ..services import medical_billing as fiscal
+from ..services.sunat import FiscalError
+from ..models.fiscal import FiscalJob
+from ..schemas.fiscal import BillingConfigurationInput
 from ..utils.jwt import get_current_identity
 from .audit import audit_change
 
@@ -41,8 +45,11 @@ STORAGE = Path(__file__).resolve().parents[2] / "storage" / "medical"
 
 def dump(row):
     # Decimal convertido a texto para no perder precisión en auditoría/JSON.
-    return {c.name: str(getattr(row, c.name)) if isinstance(getattr(row, c.name), Decimal)
+    result = {c.name: str(getattr(row, c.name)) if isinstance(getattr(row, c.name), Decimal)
             else jsonable_encoder(getattr(row, c.name)) for c in row.__table__.columns if c.name not in {'details'}}
+    if isinstance(row, Invoice):
+        result['fiscal_environment'] = (row.details or {}).get('environment', 'production' if row.legacy_id else None)
+    return result
 
 
 def admin(user):
@@ -125,7 +132,8 @@ def lookups(section: str, db: Session = Depends(get_db), identity=Depends(get_cu
             "profiles": [dump(p) for p in people],
             "users": [{"id": u.id, "name": f"{u.nombre} {u.apellido or ''}".strip(), "is_active": u.is_active, "roles": [r.nombre for r in u.active_roles()]} for u in users],
             "emissions": [{"id": e.id, "code": e.code, "customer": e.customer} for e in scope(db, user).filter(Issuance.status == "issued").order_by(Issuance.id.desc()).limit(200)] if section in {"billing", "dispatches"} else [],
-            "global_access": admin(user), "fiscal_enabled": False}
+            "global_access": admin(user), "fiscal_enabled": bool(fiscal.configuration(db)[1].get('enabled_in_v2')),
+            "can_configure_billing": fiscal.programmer(user)}
 
 
 @router.get("/plans")
@@ -304,7 +312,11 @@ def create_emission(payload: IssuanceInput, request: Request, db: Session = Depe
                   price=plan.price, provider_cost=plan.provider_cost, seller_commission=Decimal((responsible.commission_overrides or {}).get(str(plan.id), str(plan.seller_commission))),
                   platform_fee=plan.platform_fee, meta_commission=(plan.provider_cost * plan.meta_percent / 100).quantize(Decimal('.01'), rounding=ROUND_HALF_UP), conditions_url=plan.conditions_url, created_by=user.id,
                   paid_amount=plan.price if payload.payment_status != "pending" else Decimal(0))
-    return save(db, request, user, Issuance(**values))
+    row = Issuance(**values)
+    db.add(row)
+    db.flush()
+    fiscal.enqueue_boleta(db, row)
+    return save(db, request, user, row)
 
 
 @router.post("/emissions/{ident}/payment")
@@ -319,6 +331,7 @@ def record_payment(ident: int, payload: PaymentInput, request: Request, db: Sess
     before = dump(row)
     row.payment_status = payload.payment_status
     row.paid_amount = row.price
+    fiscal.enqueue_boleta(db, row)
     audit_change(db, request, user, "medical_payments", row.id, after={"reference": payload.reference, "amount": str(row.price), "destination": payload.payment_status}, module="abissol_medical")
     return save(db, request, user, row, before)
 
@@ -551,23 +564,58 @@ def legacy_download(db, source_path=None, *, file_id=None, filename=None):
 
 @router.get('/billing/configuration')
 def billing_configuration(db: Session = Depends(get_db), user=Depends(require_access('medical-billing', 'gestor'))):
-    if not admin(user):
-        raise HTTPException(403, 'Solo administración puede consultar la configuración fiscal')
-    row = db.query(MedicalBillingConfiguration).order_by(MedicalBillingConfiguration.id.desc()).first()
+    if not fiscal.programmer(user):
+        raise HTTPException(403, 'Solo el rol Programador puede acceder a la configuración fiscal')
+    return fiscal.public_configuration(db)
+
+
+@router.put('/billing/configuration')
+def update_billing_configuration(payload: BillingConfigurationInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access('medical-billing', 'gestor'))):
+    if not fiscal.programmer(user):
+        raise HTTPException(403, 'Solo el rol Programador puede modificar la configuración fiscal')
+    row, raw = fiscal.configuration(db, lock=True)
     if not row:
-        return {'imported': False, 'enabled': False, 'series': []}
-    raw = json.loads(decrypt_secret(row.payload_encrypted))
-    fields = ('company_name', 'trade_name', 'ruc', 'address', 'ubigeo', 'department', 'province', 'district', 'phone', 'email', 'provider', 'environment', 'igv_percent')
-    return {**{key: raw.get(key) for key in fields}, 'imported': True, 'enabled': False,
-            'credentials_preserved': bool(raw.get('sol_user') and raw.get('sol_password')),
-            'certificate_preserved': bool(raw.get('certificate_path_file_id')),
-            'series': [{k: s.get(k) for k in ('document_type', 'document_type_code', 'series', 'current_number', 'is_active')} for s in raw.get('series', [])]}
+        raise HTTPException(422,'Primero importa la configuración fiscal y su certificado.')
+    before = {k:raw.get(k) for k in (*fiscal.PUBLIC_FIELDS,'v2_series','enabled_in_v2')}
+    changes = payload.model_dump(exclude_unset=True)
+    if db.query(FiscalJob.id).first() and any(changes.get(k,raw.get(k)) != raw.get(k) for k in ('ruc','environment','v2_series')):
+        raise HTTPException(409,'Ya existen comprobantes V2: no se puede cambiar RUC, entorno o serie.')
+    for key,value in changes.items():
+        if key in {'sol_user','sol_password','certificate_password'} and not value:
+            continue
+        raw['enabled_in_v2' if key == 'enabled' else key] = value
+    try:
+        if raw.get('enabled_in_v2'):
+            fiscal.validate_configuration(db,raw)
+    except FiscalError as exc:
+        raise HTTPException(422,str(exc)) from exc
+    fiscal.persist_config(row,raw)
+    audit_change(db,request,user,'medical_billing_configuration',row.id,before=before,
+                 after={**{k:raw.get(k) for k in before},'credentials_updated':any(changes.get(k) for k in ('sol_user','sol_password','certificate_password'))},module='abissol_medical')
+    db.commit()
+    return fiscal.public_configuration(db)
+
+
+@router.post('/billing/{ident}/retry')
+def retry_invoice(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access('medical-billing','gestor'))):
+    if not fiscal.programmer(user):
+        raise HTTPException(403,'Solo Programador puede revisar la cola fiscal')
+    job = db.query(FiscalJob).filter_by(invoice_id=ident).with_for_update().first()
+    if not job or job.state in {'accepted','rejected'}:
+        raise HTTPException(409,'No existe una operación pendiente que se pueda revisar.')
+    before = job.state
+    job.state = 'uncertain' if job.sent_at else 'queued'
+    from ..utils.time import utc_now
+    job.next_attempt_at = utc_now()
+    audit_change(db,request,user,'medical_fiscal_jobs',job.id,before={'state':before},after={'state':job.state},module='abissol_medical')
+    db.commit()
+    return {'state':job.state}
 
 
 @router.get('/billing/{ident}/detail')
 def invoice_detail(ident: int, db: Session = Depends(get_db), user=Depends(require_access('medical-billing'))):
     row = find(invoice_scope(db, user), ident)
-    logs = []
+    logs = (row.details or {}).get('sunat_logs', [])
     if row.legacy_id:
         for record in db.query(LegacyRecord).filter_by(source_table='billing_sunat_logs'):
             raw = json.loads(decrypt_secret(record.payload_encrypted))
@@ -579,6 +627,14 @@ def invoice_detail(ident: int, db: Session = Depends(get_db), user=Depends(requi
 @router.get('/billing/{ident}/files/{kind}')
 def invoice_file(ident: int, kind: str, db: Session = Depends(get_db), user=Depends(require_access('medical-billing'))):
     row = find(invoice_scope(db, user), ident)
+    if not row.legacy_id and (row.details or {}).get('files', {}).get(kind):
+        try:
+            path = fiscal.artifact_path(row,kind)
+        except FiscalError as exc:
+            raise HTTPException(404,str(exc)) from exc
+        if not path.is_file() or hashlib.sha256(path.read_bytes()).hexdigest() != row.details['files'][kind]:
+            raise HTTPException(409,'Archivo fiscal ausente o integridad no válida.')
+        return FileResponse(path,filename=f'{row.full_number}-{kind}{path.suffix}',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
     file_id = (row.details or {}).get('files', {}).get(kind)
     if not file_id:
         raise HTTPException(404, 'Archivo no disponible')
@@ -587,6 +643,8 @@ def invoice_file(ident: int, kind: str, db: Session = Depends(get_db), user=Depe
 
 @router.post("/billing")
 def create_invoice(payload: InvoiceInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-billing", "editor"))):
+    if fiscal.configuration(db)[1].get('enabled_in_v2'):
+        raise HTTPException(409,'La boleta se genera automáticamente al registrar la emisión.')
     emission = find(scope(db, user).filter(Issuance.status == "issued"), payload.issuance_id, True)
     if db.query(Invoice.id).filter_by(issuance_id=emission.id).first():
         raise HTTPException(409, 'La emisión ya tiene comprobantes; revisa su historial fiscal')

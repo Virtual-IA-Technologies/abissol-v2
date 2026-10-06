@@ -1,5 +1,19 @@
 # Estado actual
 
+## Boleta automática y configuración exclusiva — 05/10/2026
+
+Pestaña Configuración · Programador, protegida también en GET/PUT/revisión fiscal.
+Boleta automática de nuevas emisiones, reparto fiscal cotejado con Laravel,
+numeración transaccional exclusiva, XML firmado/ZIP/PDF/QR, envío SOAP y recuperación
+de CDR sin duplicar envíos. Cola persistente 0006 y timer systemd cada minuto.
+SUNAT Beta aceptó una boleta ficticia (código 0); XSD oficial UBL 2.1 válido.
+Envío real desactivado hasta decidir serie exclusiva V2 o corte de B001 en Laravel.
+No se emitieron boletas reales ni se reprocesaron ventas migradas.
+Detalles, pruebas y límites: `03-MODULOS/FACTURACION_SUNAT.md`.
+
+Las secciones siguientes conservan el historial de implementación; las menciones
+a facturación limitada a borradores corresponden al estado anterior a este cambio.
+
 ## Corrección APIperú y selectores — 05/10/2026
 
 El servidor registraba ResponseValidationError en response.ubigeo: APIperú devuelve
