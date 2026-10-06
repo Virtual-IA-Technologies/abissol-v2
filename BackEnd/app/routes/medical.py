@@ -133,6 +133,7 @@ def lookups(section: str, db: Session = Depends(get_db), identity=Depends(get_cu
             "users": [{"id": u.id, "name": f"{u.nombre} {u.apellido or ''}".strip(), "is_active": u.is_active, "roles": [r.nombre for r in u.active_roles()]} for u in users],
             "emissions": [{"id": e.id, "code": e.code, "customer": e.customer} for e in scope(db, user).filter(Issuance.status == "issued").order_by(Issuance.id.desc()).limit(200)] if section in {"billing", "dispatches"} else [],
             "global_access": admin(user), "fiscal_enabled": bool(fiscal.configuration(db)[1].get('enabled_in_v2')),
+            "can_configure_communications": fiscal.programmer(user),
             "can_configure_billing": fiscal.programmer(user)}
 
 

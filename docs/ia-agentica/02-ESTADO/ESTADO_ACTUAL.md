@@ -1,5 +1,14 @@
 # Estado actual
 
+## Comunicaciones y pestañas — 05/10/2026
+
+Pestañas inferiores en Facturación y Comunicaciones. Correo y WhatsApp separados,
+configurables exclusivamente por Programador en UI y API. Parámetros efectivos
+del Laravel aplicados en servidor, claves cifradas, copia privada y auditoría.
+SMTP conectado y autenticado; Wablas configurado sin enviar mensajes reales.
+OTP deshabilitado. Liquidaciones conserva su base funcional.
+Ver `03-MODULOS/COMUNICACIONES.md`.
+
 ## Boleta automática y configuración exclusiva — 05/10/2026
 
 Pestaña Configuración · Programador, protegida también en GET/PUT/revisión fiscal.

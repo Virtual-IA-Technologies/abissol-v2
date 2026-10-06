@@ -28,6 +28,12 @@ from ..utils.jwt import get_current_user
 from ..utils.secrets import encrypt_secret
 from .audit import audit_change
 
+def communication_programmer(user: Usuario = Depends(get_current_user)):
+    if not any(role.nombre.casefold() == "programador" for role in user.active_roles()):
+        raise HTTPException(status_code=403, detail="Solo Programador puede configurar los canales de comunicación")
+    return user
+
+
 router = APIRouter()
 BRANDING_DIR = Path(__file__).resolve().parents[2] / "storage" / "branding"
 ALLOWED_IMAGES = {
@@ -308,7 +314,7 @@ def update_ui_settings(
 @router.get("/smtp-settings", response_model=SmtpSettingOut)
 def smtp_settings(
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_access("smtp", "lector")),
+    _: Usuario = Depends(communication_programmer),
 ):
     return _smtp_response(_get_smtp_settings(db))
 
@@ -318,7 +324,7 @@ def update_smtp_settings(
     payload: SmtpSettingWrite,
     request: Request,
     db: Session = Depends(get_db),
-    actor: Usuario = Depends(require_access("smtp", "editor")),
+    actor: Usuario = Depends(communication_programmer),
 ):
     setting = _get_smtp_settings(db)
     before = _smtp_response(setting).model_dump()
@@ -346,7 +352,7 @@ def test_smtp_settings(
     payload: SmtpTestRequest,
     request: Request,
     db: Session = Depends(get_db),
-    actor: Usuario = Depends(require_access("smtp", "editor")),
+    actor: Usuario = Depends(communication_programmer),
 ):
     try:
         send_email(
@@ -375,7 +381,7 @@ def test_smtp_settings(
 @router.get("/whatsapp-settings", response_model=WhatsappSettingOut)
 def whatsapp_settings(
     db: Session = Depends(get_db),
-    _: Usuario = Depends(require_access("whatsapp", "lector")),
+    _: Usuario = Depends(communication_programmer),
 ):
     return _whatsapp_response(_get_whatsapp_settings(db))
 
@@ -385,7 +391,7 @@ def update_whatsapp_settings(
     payload: WhatsappSettingWrite,
     request: Request,
     db: Session = Depends(get_db),
-    actor: Usuario = Depends(require_access("whatsapp", "editor")),
+    actor: Usuario = Depends(communication_programmer),
 ):
     setting = _get_whatsapp_settings(db)
     before = _whatsapp_response(setting).model_dump()
@@ -410,7 +416,7 @@ def test_whatsapp_settings(
     payload: WhatsappTestRequest,
     request: Request,
     db: Session = Depends(get_db),
-    actor: Usuario = Depends(require_access("whatsapp", "editor")),
+    actor: Usuario = Depends(communication_programmer),
 ):
     try:
         send_whatsapp(db, payload.phone, payload.message.strip())
