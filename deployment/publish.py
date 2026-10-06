@@ -7,6 +7,8 @@ import tarfile
 import tempfile
 from pathlib import Path
 import sys
+import hashlib
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "BackEnd"))
@@ -15,6 +17,14 @@ from app.services.main_workflow import repository_status, validate_delivery_file
 
 def run(args, **kwargs):
     subprocess.run([str(arg) for arg in args], check=True, **kwargs)
+
+def dist_digest(directory):
+    digest = hashlib.sha256()
+    for file in sorted(directory.rglob("*")):
+        if file.is_file():
+            digest.update(file.relative_to(directory).as_posix().encode())
+            digest.update(file.read_bytes())
+    return digest.hexdigest()
 
 def main():
     config = dotenv_values(ROOT / "deployment/.env")
@@ -26,9 +36,18 @@ def main():
     validate_delivery_files(ROOT)
     commit = status["local_commit"]
     frontend = ROOT / "FrontEnd/frontend-app"
-    # No confiar en un dist anterior a este commit.
+    # Reutilizar solamente un build del mismo árbol, origen y contenido verificado.
+    tree = subprocess.check_output(["git", "rev-parse", "HEAD:FrontEnd/frontend-app"], cwd=ROOT, text=True).strip()
+    stamp = ROOT / ".local/frontend-build.json"
+    cached = json.loads(stamp.read_text()) if stamp.exists() else {}
+    build_key = tree + ":https://v2.abissol.org"
     npm = "npm.cmd" if os.name == "nt" else "npm"
-    run([npm, "run", "build"], cwd=frontend, env={**os.environ, "VITE_API_URL": "https://v2.abissol.org"})
+    if cached.get("key") != build_key or not (frontend / "dist/index.html").exists() or cached.get("digest") != dist_digest(frontend / "dist"):
+        run([npm, "run", "build"], cwd=frontend, env={**os.environ, "VITE_API_URL": "https://v2.abissol.org"})
+        stamp.parent.mkdir(exist_ok=True)
+        stamp.write_text(json.dumps({"key": build_key, "digest": dist_digest(frontend / "dist")}))
+    else:
+        print("Build de producción verificado; reutilizando los mismos archivos.", flush=True)
     with tempfile.TemporaryDirectory(prefix="abissol-publish-") as directory:
         tmp = Path(directory)
         key = tmp / "identity"
