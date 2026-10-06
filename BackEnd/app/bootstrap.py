@@ -72,7 +72,7 @@ def seed_platform(db: Session):
         ("HAMPI-ESENCIAL", "Hampi Esencial", "HE", 55, 12, 15),
         ("HAMPI-PLUS", "Hampi Plus", "HP", 255, 199, 25),
     ]:
-        if not db.query(MedicalPlan.id).filter_by(code=code).first():
+        if not db.query(MedicalPlan.id).filter(MedicalPlan.code.in_([code, code.replace('-', '_')])).first():
             db.add(MedicalPlan(code=code, name=name, prefix=prefix, price=price,
                 provider_cost=cost, seller_commission=commission, platform_fee=0, validity_days=365))
     if not db.query(MedicalSource.id).filter_by(code="ABISSOL").first():

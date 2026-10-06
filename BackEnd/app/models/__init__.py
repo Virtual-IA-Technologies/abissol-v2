@@ -14,3 +14,4 @@ from .devops import DevopsActionLog
 from .settings import AviSetting, AviThread, MessageTemplateSetting, SmtpSetting, UiSetting, WhatsappSetting
 from .ubigeo import Ubigeo
 from .medical import MedicalPlan, MedicalSource, MedicalProfile, MedicalIssuance, MedicalLiquidation, MedicalLiquidationItem, MedicalVoucher, MedicalInvoice, MedicalDispatch
+from .legacy import LegacyRecord, LegacyFile, MedicalBillingConfiguration

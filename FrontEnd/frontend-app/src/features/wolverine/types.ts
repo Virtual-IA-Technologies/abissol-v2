@@ -27,6 +27,7 @@ export interface User {
   username: string;
   correo: string;
   telefono: string | null;
+  legacy_contact_phone?: string | null;
   avatar_file: string | null;
   tema: ThemeName;
   menu_palette?: "theme" | "custom";

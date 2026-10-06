@@ -70,7 +70,7 @@ class UserRolePayload(BaseModel):
 
 
 class UsuarioCreate(UserRolePayload):
-    nombre: str = Field(min_length=1, max_length=50)
+    nombre: str = Field(min_length=1, max_length=180)
     apellido: str = Field(min_length=1, max_length=50)
     username: str = Field(min_length=3, max_length=40)
     correo: EmailStr
@@ -87,7 +87,7 @@ class UsuarioCreate(UserRolePayload):
 
 
 class UsuarioUpdate(UserRolePayload):
-    nombre: str = Field(min_length=1, max_length=50)
+    nombre: str = Field(min_length=1, max_length=180)
     apellido: str = Field(min_length=0, max_length=50)
     username: str = Field(min_length=1, max_length=40)
     correo: EmailStr | None = None
@@ -101,7 +101,7 @@ class UsuarioUpdate(UserRolePayload):
 
 
 class MiCuentaUpdate(BaseModel):
-    nombre: str = Field(min_length=1, max_length=50)
+    nombre: str = Field(min_length=1, max_length=180)
     apellido: str = Field(min_length=1, max_length=50)
     username: str = Field(min_length=3, max_length=40)
     correo: EmailStr
@@ -166,6 +166,7 @@ class UsuarioOut(BaseModel):
     apellido: str
     username: str
     telefono: str | None
+    legacy_contact_phone: str | None = None
     correo: str
     avatar_file: str | None = None
     tema: Literal["light", "medium", "dark", "virtualia", "lady"] = "medium"

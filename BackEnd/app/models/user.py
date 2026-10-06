@@ -41,7 +41,8 @@ class Usuario(Base):
         CheckConstraint("background_tone BETWEEN 0 AND 100", name="ck_usuarios_background_tone"),
     )
     id = Column(Integer, primary_key=True, autoincrement=True)
-    nombre = Column(String(50), nullable=False)
+    nombre = Column(String(180), nullable=False)
+    legacy_contact_phone = Column(String(100), nullable=True)
     apellido = Column(String(50), nullable=False)
     username = Column(String(40), nullable=False, unique=True, index=True)
     telefono = Column(String(20), nullable=True, unique=True, index=True)

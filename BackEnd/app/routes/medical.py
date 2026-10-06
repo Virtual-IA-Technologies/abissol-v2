@@ -2,6 +2,8 @@
 import hashlib
 import html
 import io
+import json
+import re
 import secrets
 from datetime import date, datetime, timedelta
 from decimal import Decimal, ROUND_HALF_UP
@@ -19,6 +21,8 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..models import Usuario
+from ..models.legacy import LegacyRecord, LegacyFile, MedicalBillingConfiguration
+from ..utils.secrets import decrypt_secret
 from ..models.medical import (MedicalPlan as Plan, MedicalSource as Source, MedicalProfile as Profile,
     MedicalIssuance as Issuance, MedicalLiquidation as Liquidation, MedicalLiquidationItem as Item,
     MedicalVoucher as Voucher, MedicalInvoice as Invoice, MedicalDispatch as Dispatch)
@@ -38,7 +42,7 @@ STORAGE = Path(__file__).resolve().parents[2] / "storage" / "medical"
 def dump(row):
     # Decimal convertido a texto para no perder precisión en auditoría/JSON.
     return {c.name: str(getattr(row, c.name)) if isinstance(getattr(row, c.name), Decimal)
-            else jsonable_encoder(getattr(row, c.name)) for c in row.__table__.columns}
+            else jsonable_encoder(getattr(row, c.name)) for c in row.__table__.columns if c.name not in {'details'}}
 
 
 def admin(user):
@@ -297,7 +301,7 @@ def create_emission(payload: IssuanceInput, request: Request, db: Session = Depe
     values.update(code=f"{plan.prefix}-{plan.counter:06d}", token=secrets.token_urlsafe(32),
                   plan_name=plan.name, source_id=emitter.source_id, responsible_id=responsible.id,
                   sale_date=today, ends_on=payload.starts_on + timedelta(days=plan.validity_days - 1),
-                  price=plan.price, provider_cost=plan.provider_cost, seller_commission=plan.seller_commission,
+                  price=plan.price, provider_cost=plan.provider_cost, seller_commission=Decimal((responsible.commission_overrides or {}).get(str(plan.id), str(plan.seller_commission))),
                   platform_fee=plan.platform_fee, meta_commission=(plan.provider_cost * plan.meta_percent / 100).quantize(Decimal('.01'), rounding=ROUND_HALF_UP), conditions_url=plan.conditions_url, created_by=user.id,
                   paid_amount=plan.price if payload.payment_status != "pending" else Decimal(0))
     return save(db, request, user, Issuance(**values))
@@ -362,12 +366,15 @@ def letter_pdf(row, url):
 @router.get("/emissions/{ident}/letter")
 def letter(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-emissions"))):
     row = find(scope(db, user), ident)
+    if row.legacy_id:
+        original = legacy_data(db, 'medical_issuances', row.legacy_id)
+        return legacy_download(db, original.get('welcome_letter_path'), filename=row.code + '.pdf')
     return Response(letter_pdf(row, public_url(request, row)), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{row.code}.pdf"', "Cache-Control": "no-store"})
 
 
 @router.get("/validate/{token}")
 def validate(token: str, request: Request, db: Session = Depends(get_db)):
-    if len(token) != 43:
+    if not re.fullmatch(r'[A-Za-z0-9_-]{43,64}', token):
         raise HTTPException(404, "Certificado no encontrado")
     row = db.query(Issuance).filter_by(token=token).first()
     if not row:
@@ -488,6 +495,8 @@ def voucher_file(ident: int, db: Session = Depends(get_db), user=Depends(require
 @router.post("/liquidations/{ident}/{action}")
 def liquidation_action(ident: int, action: str, payload: ReasonInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
     row = find(liquidation_scope(db, user), ident, True)
+    if row.legacy_id:
+        raise HTTPException(409, "Liquidación histórica: conserva su conciliación original")
     before = dump(row)
     transitions = {"submit": ({"draft", "observed"}, "submitted"), "approve": ({"submitted"}, "approved"),
                    "observe": ({"submitted"}, "observed"), "pay": ({"approved"}, "paid"), "cancel": ({"draft", "observed"}, "cancelled")}
@@ -512,19 +521,78 @@ def liquidation_action(ident: int, action: str, payload: ReasonInput, request: R
 
 @router.get("/billing")
 def billing(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), db: Session = Depends(get_db), user=Depends(require_access("medical-billing"))):
-    return page(db.query(Invoice).filter(Invoice.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), offset, limit)
+    return page(invoice_scope(db, user), offset, limit)
+
+
+def invoice_scope(db, user):
+    query = db.query(Invoice)
+    return query if admin(user) else query.filter(Invoice.deleted_at.is_(None), Invoice.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery()))
+
+
+def legacy_data(db, table, ident):
+    record = db.query(LegacyRecord).filter_by(source_table=table, source_key=str(ident)).first()
+    return json.loads(decrypt_secret(record.payload_encrypted)) if record else {}
+
+
+def legacy_download(db, source_path=None, *, file_id=None, filename=None):
+    file = db.get(LegacyFile, file_id) if file_id else db.query(LegacyFile).filter_by(path_hash=hashlib.sha256(str(source_path).replace('\\', '/').encode()).hexdigest()).first() if source_path else None
+    if not file:
+        raise HTTPException(404, "El archivo original no está disponible en el archivo migrado")
+    root = STORAGE.parent / 'legacy_abissol'
+    path = (root / file.storage_key).resolve()
+    if not path.is_relative_to(root.resolve()) or not path.is_file():
+        raise HTTPException(404, "Archivo original no disponible")
+    return FileResponse(path, filename=filename or file.filename, headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get('/billing/configuration')
+def billing_configuration(db: Session = Depends(get_db), user=Depends(require_access('medical-billing', 'gestor'))):
+    if not admin(user):
+        raise HTTPException(403, 'Solo administración puede consultar la configuración fiscal')
+    row = db.query(MedicalBillingConfiguration).order_by(MedicalBillingConfiguration.id.desc()).first()
+    if not row:
+        return {'imported': False, 'enabled': False, 'series': []}
+    raw = json.loads(decrypt_secret(row.payload_encrypted))
+    fields = ('company_name', 'trade_name', 'ruc', 'address', 'ubigeo', 'department', 'province', 'district', 'phone', 'email', 'provider', 'environment', 'igv_percent')
+    return {**{key: raw.get(key) for key in fields}, 'imported': True, 'enabled': False,
+            'credentials_preserved': bool(raw.get('sol_user') and raw.get('sol_password')),
+            'certificate_preserved': bool(raw.get('certificate_path_file_id')),
+            'series': [{k: s.get(k) for k in ('document_type', 'document_type_code', 'series', 'current_number', 'is_active')} for s in raw.get('series', [])]}
+
+
+@router.get('/billing/{ident}/detail')
+def invoice_detail(ident: int, db: Session = Depends(get_db), user=Depends(require_access('medical-billing'))):
+    row = find(invoice_scope(db, user), ident)
+    logs = []
+    if row.legacy_id:
+        for record in db.query(LegacyRecord).filter_by(source_table='billing_sunat_logs'):
+            raw = json.loads(decrypt_secret(record.payload_encrypted))
+            if raw.get('invoice_id') == row.legacy_id:
+                logs.append({key: raw.get(key) for key in ('action', 'status', 'created_at', 'error_type', 'error_category', 'severity')})
+    return {**dump(row), 'details': row.details or {}, 'sunat_logs': logs}
+
+
+@router.get('/billing/{ident}/files/{kind}')
+def invoice_file(ident: int, kind: str, db: Session = Depends(get_db), user=Depends(require_access('medical-billing'))):
+    row = find(invoice_scope(db, user), ident)
+    file_id = (row.details or {}).get('files', {}).get(kind)
+    if not file_id:
+        raise HTTPException(404, 'Archivo no disponible')
+    return legacy_download(db, file_id=file_id)
 
 
 @router.post("/billing")
 def create_invoice(payload: InvoiceInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-billing", "editor"))):
     emission = find(scope(db, user).filter(Issuance.status == "issued"), payload.issuance_id, True)
-    return save(db, request, user, Invoice(**payload.model_dump(), total=emission.price, created_by=user.id))
+    if db.query(Invoice.id).filter_by(issuance_id=emission.id).first():
+        raise HTTPException(409, 'La emisión ya tiene comprobantes; revisa su historial fiscal')
+    return save(db, request, user, Invoice(**payload.model_dump(), draft_key=emission.id, total=emission.price, created_by=user.id))
 
 
 @router.put("/billing/{ident}")
 def update_invoice(ident: int, payload: InvoiceInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-billing", "editor"))):
     row = find(db.query(Invoice).filter(Invoice.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), ident, True)
-    if row.status != "draft" or row.issuance_id != payload.issuance_id:
+    if row.legacy_id or row.status != "draft" or row.issuance_id != payload.issuance_id:
         raise HTTPException(409, "Solo se pueden corregir los datos del borrador original")
     before = dump(row)
     for k, v in payload.model_dump().items():
@@ -534,7 +602,10 @@ def update_invoice(ident: int, payload: InvoiceInput, request: Request, db: Sess
 
 @router.get("/dispatches")
 def dispatches(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), db: Session = Depends(get_db), user=Depends(require_access("medical-dispatches"))):
-    return page(db.query(Dispatch).filter(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), offset, limit)
+    query = db.query(Dispatch)
+    if not admin(user):
+        query = query.filter(or_(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery()), Dispatch.liquidation_id.in_(liquidation_scope(db, user).with_entities(Liquidation.id).scalar_subquery())))
+    return page(query, offset, limit)
 
 
 def deliver(db, request, user, row, emission):
@@ -569,6 +640,8 @@ def create_dispatch(payload: DispatchInput, request: Request, db: Session = Depe
 @router.post("/dispatches/{ident}/retry")
 def retry_dispatch(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-dispatches", "editor"))):
     row = find(db.query(Dispatch).filter(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), ident, True)
+    if row.legacy_id:
+        raise HTTPException(409, 'Comunicación histórica: no se reenvía desde la migración')
     emission = find(scope(db, user).filter(Issuance.status == "issued"), row.issuance_id)
     if row.status != "failed":
         raise HTTPException(409, "Solo se reintentan envíos fallidos; un envío en curso requiere comprobar el proveedor")

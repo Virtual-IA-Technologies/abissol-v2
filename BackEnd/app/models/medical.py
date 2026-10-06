@@ -1,5 +1,5 @@
 """Negocio ABISSOL; independiente de las tablas del sistema anterior."""
-from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from ..database import Base
 from ..utils.time import utc_now
 
@@ -40,6 +40,7 @@ class MedicalProfile(Base):
     external_user_id = Column(String(100))
     source_id = Column(Integer, ForeignKey("medical_sources.id"), nullable=False, index=True)
     manager_id = Column(Integer, ForeignKey("medical_profiles.id"))
+    commission_overrides = Column(JSON)
     kind = Column(String(25), nullable=False)
     active = Column(Boolean, nullable=False, default=True)
 
@@ -76,6 +77,8 @@ class MedicalIssuance(Base):
     cancellation_reason = Column(Text)
     external_source = Column(String(80))
     external_reference = Column(String(100))
+    legacy_id = Column(Integer, unique=True)
+    legacy_status = Column(String(40))
     created_by = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
@@ -84,7 +87,9 @@ class MedicalLiquidation(Base):
     __tablename__ = "medical_liquidations"
     id = Column(Integer, primary_key=True)
     kind = Column(String(20), nullable=False)
-    responsible_id = Column(Integer, ForeignKey("medical_profiles.id"), nullable=False, index=True)
+    responsible_id = Column(Integer, ForeignKey("medical_profiles.id"), nullable=True, index=True)
+    legacy_id = Column(Integer, unique=True)
+    code = Column(String(80))
     starts_on = Column(Date, nullable=False)
     ends_on = Column(Date, nullable=False)
     status = Column(String(20), nullable=False, default="draft")
@@ -125,8 +130,15 @@ class MedicalVoucher(Base):
 class MedicalInvoice(Base):
     __tablename__ = "medical_invoices"
     id = Column(Integer, primary_key=True)
-    issuance_id = Column(Integer, ForeignKey("medical_issuances.id"), unique=True, nullable=False)
-    document_type = Column(String(20), nullable=False)
+    issuance_id = Column(Integer, ForeignKey("medical_issuances.id"), index=True, nullable=True)
+    draft_key = Column(Integer, unique=True)
+    legacy_id = Column(Integer, unique=True)
+    full_number = Column(String(80))
+    issue_date = Column(Date)
+    payment_status = Column(String(30))
+    deleted_at = Column(DateTime)
+    details = Column(JSON)
+    document_type = Column(String(40), nullable=False)
     customer = Column(String(180), nullable=False)
     document_number = Column(String(20), nullable=False)
     total = Column(Numeric(12, 2), nullable=False)
@@ -139,7 +151,10 @@ class MedicalInvoice(Base):
 class MedicalDispatch(Base):
     __tablename__ = "medical_dispatches"
     id = Column(Integer, primary_key=True)
-    issuance_id = Column(Integer, ForeignKey("medical_issuances.id"), nullable=False, index=True)
+    issuance_id = Column(Integer, ForeignKey("medical_issuances.id"), nullable=True, index=True)
+    liquidation_id = Column(Integer, ForeignKey("medical_liquidations.id"))
+    legacy_id = Column(Integer, unique=True)
+    kind = Column(String(50))
     channel = Column(String(20), nullable=False)
     recipient = Column(String(180), nullable=False)
     status = Column(String(20), nullable=False, default="pending")

@@ -1,5 +1,17 @@
 # Estado actual
 
+## Migración real Laravel — 05/10/2026
+
+Soporte preparado para migrar las cuentas y el negocio de app.abissol.org,
+incluidos históricos fiscales y archivos originales. Migración 0005, importador
+transaccional e idempotente, secretos cifrados y conciliación por registro.
+Simulación remota sin errores: 69 usuarios, 9 emisiones, 7 liquidaciones,
+43 comprobantes y 273 documentos. Cuatro archivos de un comprobante archivado
+ya no existen en el origen; se conserva y señala esa ausencia.
+27 pruebas backend aprobadas, TypeScript/lint correctos y Alembic sin diferencias.
+Detalle y límites: `03-MODULOS/MIGRACION_LARAVEL.md`.
+Carga definitiva/publicación pendientes de la verificación final de este cambio.
+
 ## Identidad y permisos comerciales — 05/10/2026
 
 Red comercial distingue entidades, participantes externos y cuentas de acceso.
