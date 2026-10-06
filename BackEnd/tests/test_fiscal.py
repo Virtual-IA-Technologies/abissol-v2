@@ -187,3 +187,22 @@ class FiscalFlowTests(unittest.TestCase):
                 billing.process_job(db,job.id)
                 self.assertEqual(job.state,'rejected')
                 self.assertEqual(db.get(MedicalInvoice,job.invoice_id).sunat_status,'rejected')
+
+    def test_queue_can_cross_midnight_without_redating(self):
+        self.enable()
+        from zoneinfo import ZoneInfo
+        today=datetime.now(ZoneInfo('America/Lima')).date()
+        with tempfile.TemporaryDirectory() as directory, patch.object(billing,'STORAGE',Path(directory)), patch.object(billing,'validate_configuration',return_value=certificate()):
+            for days,expected in [(1,'accepted'),(2,'blocked')]:
+                self.issuance()
+                with self.sessions() as db:
+                    job=db.query(FiscalJob).order_by(FiscalJob.id.desc()).first()
+                    invoice=db.get(MedicalInvoice,job.invoice_id)
+                    original=today-timedelta(days=days)
+                    invoice.issue_date=original
+                    db.commit()
+                    with patch.object(sunat,'send_bill',return_value=cdr(invoice.full_number)) as send:
+                        billing.process_job(db,job.id)
+                        self.assertEqual(job.state,expected)
+                        self.assertEqual(invoice.issue_date,original)
+                        self.assertEqual(send.call_count,1 if days==1 else 0)

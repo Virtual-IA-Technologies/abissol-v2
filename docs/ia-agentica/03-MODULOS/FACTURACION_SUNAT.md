@@ -57,8 +57,10 @@ Antes de contactar SUNAT se confirma en base el intento y se conservan XML/ZIP/P
 Después de timeout o reinicio solo se consulta `getStatusCdr`, sin regenerar XML ni
 reenviar a ciegas. CDR debe coincidir en RUC y número; código 0 acepta, los demás
 rechazan. Un error previo al envío queda bloqueado para revisión del Programador.
-Una recepción incierta se consulta cada cinco minutos. Comprobantes sin primer
-envío de días anteriores se bloquean para revisión, sin cambiar su fecha/número.
+Una recepción incierta se consulta cada cinco minutos. La ventana operativa de
+primer envío admite hoy y ayer para cubrir colas que crucen medianoche; retrasos
+mayores se bloquean para revisión, sin cambiar fecha/número. Es una política
+conservadora del piloto, no una declaración del plazo máximo normativo.
 No se reenvían rechazados; notas de crédito, débito y bajas nuevas quedan fuera
 de este flujo de boletas. Se conserva consulta del historial importado.
 
@@ -74,6 +76,10 @@ de este flujo de boletas. Se conserva consulta del historial importado.
   ni credenciales reales ni se emitieron documentos tributarios de producción.
 - Certificado ABISSOL cotejado privadamente: integridad y RUC correctos, vigente
   hasta 03/07/2029. Contrato del CDR contrastado con uno aceptado del historial.
+- Conexión real de producción verificada mediante `getStatusCdr` de una boleta
+  histórica propia: código 0 y coincidencia con el registro original. Solo se
+  transmitieron RUC emisor, tipo, serie y número; sin datos del cliente ni nuevos
+  comprobantes. Configuración completa excepto elección de serie exclusiva V2.
 - TypeScript, lint, pruebas comerciales y navegación local escritorio/móvil.
 
 Manual adjunto del usuario: `D:\TRABAJO\AFOCAT.PE\Manual SUNAT.pdf`, mayo 2021,

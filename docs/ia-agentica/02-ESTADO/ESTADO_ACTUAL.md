@@ -7,6 +7,10 @@ Boleta automática de nuevas emisiones, reparto fiscal cotejado con Laravel,
 numeración transaccional exclusiva, XML firmado/ZIP/PDF/QR, envío SOAP y recuperación
 de CDR sin duplicar envíos. Cola persistente 0006 y timer systemd cada minuto.
 SUNAT Beta aceptó una boleta ficticia (código 0); XSD oficial UBL 2.1 válido.
+Consulta real getStatusCdr en producción correcta (histórico aceptado, sin emitir
+nuevos documentos). Pestaña publicada verificada en HTTPS, escritorio y móvil.
+Ocho pruebas fiscales, seis comerciales y tres de importación aprobadas; esquema
+MariaDB sin diferencias. La cola admite el cruce de medianoche sin redatar boletas.
 Envío real desactivado hasta decidir serie exclusiva V2 o corte de B001 en Laravel.
 No se emitieron boletas reales ni se reprocesaron ventas migradas.
 Detalles, pruebas y límites: `03-MODULOS/FACTURACION_SUNAT.md`.

@@ -147,7 +147,7 @@ def printable_pdf(invoice, digest):
     page.insert_text((35,73),'BOLETA DE VENTA ELECTRONICA',fontsize=13,color=(1,1,1))
     page.insert_text((35,101),invoice.full_number,fontsize=16,color=(1,1,1))
     lines = [config['company_name'],'RUC '+config['ruc'],config['address'],'',
-             'Fecha: '+invoice.issue_date.isoformat(),'Titular: '+invoice.customer,'Documento: '+invoice.document_number,'Moneda: PEN / Soles','Estado del cobro: '+('Confirmado' if invoice.payment_status=='paid' else 'Pendiente'),'']
+             'Fecha: '+invoice.issue_date.isoformat(),'Titular: '+invoice.customer,'Documento: '+invoice.document_number,'Moneda: PEN / Soles','Cobro al generar este PDF: '+('Confirmado' if invoice.payment_status=='paid' else 'Pendiente'),'']
     for item in invoice.details['items']:
         lines.append(f"1 ZZ - {item['description']} - S/ {item['total']}")
     lines += ['', 'Operaciones inafectas: S/ '+str(sunat.money(invoice.total)), 'IGV: S/ 0.00', 'TOTAL: S/ '+str(sunat.money(invoice.total)), '',
@@ -187,8 +187,10 @@ def process_job(db, ident):
     try:
         key, cert = validate_configuration(db,config)
         if not job.sent_at:
-            if invoice.issue_date != datetime.now(ZoneInfo('America/Lima')).date():
-                raise sunat.FiscalError('Comprobante sin enviar de una fecha anterior: requiere revisión del programador.')
+            today = datetime.now(ZoneInfo('America/Lima')).date()
+            # Allow a queued sale to cross midnight; never alter its original date.
+            if not today - timedelta(days=1) <= invoice.issue_date <= today:
+                raise sunat.FiscalError('Comprobante sin enviar fuera de la ventana operativa de hoy/ayer: requiere revisión del programador.')
             root = sunat.build_invoice(config,invoice,invoice.details['items'])
             xml, digest = sunat.sign_xml(root,key,cert)
             name = config['ruc']+'-03-'+invoice.full_number
