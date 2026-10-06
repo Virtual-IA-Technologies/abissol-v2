@@ -455,12 +455,16 @@ async def add_voucher(ident: int, request: Request, reference: str = Form(..., m
     suffix = ".pdf" if content.startswith(b"%PDF-") else ".png" if content.startswith(b"\x89PNG\r\n\x1a\n") else ".jpg" if content.startswith(b"\xff\xd8\xff") else None
     if not suffix:
         raise HTTPException(422, "Adjunta un PDF o imagen PNG/JPEG")
+    digest = hashlib.sha256(content).hexdigest()
+    # Los comprobantes heredados pueden compartir referencias entre sí. También
+    # deben bloquear su reutilización en liquidaciones nuevas de V2.
+    if db.query(Voucher.id).filter(Voucher.active.is_(True), or_(func.upper(Voucher.reference) == reference.strip().upper(), Voucher.digest == digest)).first():
+        raise HTTPException(409, "La referencia o archivo ya pertenece a un comprobante activo")
     STORAGE.mkdir(parents=True, exist_ok=True)
     key = secrets.token_hex(24) + suffix
     target = STORAGE / key
     target.write_bytes(content)
     try:
-        digest = hashlib.sha256(content).hexdigest()
         result = save(db, request, user, Voucher(liquidation_id=ident, reference=reference.strip(), active_reference=reference.strip().upper(), amount=amount, paid_on=paid_on,
             filename=Path(file.filename or "comprobante").name[:180], storage_key=key, digest=digest, active_digest=digest))
     except Exception:

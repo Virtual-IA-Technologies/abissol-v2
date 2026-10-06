@@ -8,7 +8,7 @@ from unittest.mock import patch
 from zoneinfo import ZoneInfo
 import test_platform as platform
 from app.models import AccessGrant, Menu, Usuario
-from app.models.medical import MedicalPlan, MedicalIssuance, MedicalLiquidationItem
+from app.models.medical import MedicalPlan, MedicalIssuance, MedicalLiquidationItem, MedicalVoucher
 
 API = platform.API + "/medical"
 
@@ -92,6 +92,13 @@ class MedicalTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200, response.text)
             self.assertNotIn("storage_key", response.json())
             voucher_id = response.json()["id"]
+            with self.sessions() as db:
+                legacy = db.get(MedicalVoucher, voucher_id)
+                legacy.active_reference = legacy.active_digest = None
+                db.commit()
+            for reference, content in [('test-001', b'%PDF-1.7 otro'), ('NEW-REF', b'%PDF-1.7 prueba')]:
+                duplicate = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"reference": reference, "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", content, "application/pdf")}, headers=self.headers)
+                self.assertEqual(duplicate.status_code, 409)
             self.post(f"/vouchers/{voucher_id}/void", {"reason": "Corregir comprobante"})
             replacement = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"reference": "TEST-001", "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", b"%PDF-1.7 prueba", "application/pdf")}, headers=self.headers)
             self.assertEqual(replacement.status_code, 200, replacement.text)

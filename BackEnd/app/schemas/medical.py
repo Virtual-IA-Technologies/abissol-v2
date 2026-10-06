@@ -12,7 +12,7 @@ class Payload(BaseModel):
 class PlanInput(Payload):
     code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Z0-9_-]+$")
     name: str = Field(min_length=2, max_length=120)
-    prefix: str = Field(min_length=2, max_length=15, pattern=r"^[A-Z0-9-]+$")
+    prefix: str = Field(min_length=1, max_length=15, pattern=r"^[A-Z0-9-]+$")
     price: Money
     provider_cost: Money
     seller_commission: Money

@@ -2,15 +2,25 @@
 
 ## Migración real Laravel — 05/10/2026
 
-Soporte preparado para migrar las cuentas y el negocio de app.abissol.org,
+Migradas las cuentas y el negocio de app.abissol.org al piloto v2.abissol.org,
 incluidos históricos fiscales y archivos originales. Migración 0005, importador
 transaccional e idempotente, secretos cifrados y conciliación por registro.
-Simulación remota sin errores: 69 usuarios, 9 emisiones, 7 liquidaciones,
-43 comprobantes y 273 documentos. Cuatro archivos de un comprobante archivado
+Carga real verificada: 69 usuarios (clave administradora V2 conservada), 64 perfiles,
+9 emisiones, 7 liquidaciones, 43 comprobantes y 273 documentos/versiones.
+254 archivos cotejados por SHA256 con lectura como usuario del servicio.
+Una segunda ejecución con rollback confirma cero filas nuevas; una auditoría de carga.
+Ventas activas S/ 840.00 y total histórico S/ 895.00, incluida la anulación.
+Cuatro archivos de un comprobante archivado
 ya no existen en el origen; se conserva y señala esa ausencia.
 27 pruebas backend aprobadas, TypeScript/lint correctos y Alembic sin diferencias.
 Detalle y límites: `03-MODULOS/MIGRACION_LARAVEL.md`.
-Carga definitiva/publicación pendientes de la verificación final de este cambio.
+Publicado directamente en main y en HTTPS. Verificadas siete opciones comerciales,
+Usuarios (incluida Carmen), Archivos, nueve cartas originales y descargas fiscales
+PDF/ticket/XML/ZIP/CDR. Sin errores JavaScript ni HTTP en la navegación probada.
+Series A/B compatibles con el editor y protección contra reutilizar depósitos legados.
+Configuración fiscal, certificado y credenciales conservados: envío SUNAT en V2
+pendiente de habilitación/validación. El conector externo sigue en Laravel; no hay
+sincronización continua ni corte de servicio anterior.
 
 ## Identidad y permisos comerciales — 05/10/2026
 

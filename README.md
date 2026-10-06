@@ -3,17 +3,23 @@
 Base FastAPI + React derivada del código local de SIACAT V4 el 05/10/2026.
 Proyecto independiente con módulos comerciales ABISSOL en FastAPI y React.
 
+Piloto con datos reales migrados de ABISSOL Laravel: cuentas, red comercial,
+emisiones, liquidaciones, documentos e historial fiscal. Consulta de originales
+PDF/XML/CDR y configuración fiscal conservada; emisión electrónica nueva en V2
+pendiente de habilitación. Ver [Migración Laravel](docs/ia-agentica/03-MODULOS/MIGRACION_LARAVEL.md).
+
 Negocio: planes, red comercial, emisiones con carta/QR, comunicaciones salientes,
 liquidaciones, preparación de facturación y reportes. Sin OTP WhatsApp, bandeja
 de correo ni aprobaciones generales. Facturación electrónica SUNAT todavía no
-habilitada; los registros fiscales son borradores internos. Alcance y configuración
+habilitada; los nuevos registros fiscales son borradores internos. El historial
+importado conserva sus estados originales. Alcance y configuración
 en [Negocio ABISSOL](docs/ia-agentica/03-MODULOS/NEGOCIO_ABISSOL.md).
 
 Conserva sesiones, usuarios, roles, permisos Wolverine, menús, auditoría, apariencia,
 calendario, notificaciones, documentos, documentación, búsqueda y componentes reutilizables.
 No incluye Emisiones, Control, Siniestros, Contabilidad, facturación CAT, MTC,
 sincronización ALP ni la integración comercial ABISSOL del sistema de origen.
-No se importaron datos, claves, almacenamiento, cuentas ni historial Git del origen.
+No se importaron datos, claves, almacenamiento, cuentas ni historial Git de SIACAT.
 
 ## Ejecución local en Windows
 

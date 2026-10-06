@@ -89,6 +89,10 @@ navegación y tres pruebas de migración con datos sintéticos. Estas últimas v
 compatibilidad bcrypt `$2y$`, clave administradora preservada, nombres largos,
 teléfonos compartidos, importación repetible, conciliación, conflicto de instantánea,
 aislamiento fiscal, secretos ocultos y archivos privados sin escapes de ruta.
-MariaDB local: migración aplicada y Alembic sin diferencias. Simulación remota con
-datos reales y rollback: cantidades e importes conciliados. Publicación y verificación
-final se registran en ESTADO_ACTUAL.md al terminar.
+MariaDB local: migración aplicada y Alembic sin diferencias. Carga remota aplicada:
+cantidades e importes conciliados, 254 archivos cotejados por SHA256 y segunda
+ejecución con rollback sin nuevas filas. Una auditoría de importación conservada.
+Piloto HTTPS verificado: siete opciones comerciales, Usuarios, nueve cartas PDF
+originales y archivos fiscales. Series A/B editables; comprobantes bancarios históricos
+no pueden reutilizarse en nuevas liquidaciones, aunque sus claves de unicidad sean nulas.
+Estado de publicación en ESTADO_ACTUAL.md.

@@ -97,6 +97,11 @@ class LegacyImportTests(unittest.TestCase):
                 db.add(AccessGrant(usuario_id=reader.id,menu_id=menu.id,access_level='gestor'))
             db.commit()
         _, headers = self.login()
+        plan = next(p for p in self.client.get(API+'/plans',headers=headers).json()['items'] if p['code']=='HAMPI_ESENCIAL')
+        from app.schemas.medical import PlanInput
+        fields = PlanInput.model_fields.keys()
+        result = self.client.put(API+f'/plans/{plan["id"]}',headers=headers,json={k:v for k,v in plan.items() if k in fields})
+        self.assertEqual(result.status_code,200,result.text)
         config = self.client.get(API+'/billing/configuration',headers=headers)
         self.assertEqual(config.status_code,200)
         self.assertFalse(config.json()['enabled'])

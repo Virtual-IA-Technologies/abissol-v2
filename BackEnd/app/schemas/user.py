@@ -102,7 +102,7 @@ class UsuarioUpdate(UserRolePayload):
 
 class MiCuentaUpdate(BaseModel):
     nombre: str = Field(min_length=1, max_length=180)
-    apellido: str = Field(min_length=1, max_length=50)
+    apellido: str = Field(min_length=0, max_length=50)
     username: str = Field(min_length=3, max_length=40)
     correo: EmailStr
     telefono: str | None = Field(default=None, max_length=20)
