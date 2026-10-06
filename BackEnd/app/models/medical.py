@@ -26,13 +26,18 @@ class MedicalSource(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(30), unique=True, nullable=False)
     name = Column(String(120), nullable=False)
+    kind = Column(String(20), nullable=False, default="internal")
+    external_key = Column(String(80), unique=True)
     active = Column(Boolean, nullable=False, default=True)
 
 
 class MedicalProfile(Base):
     __tablename__ = "medical_profiles"
+    __table_args__ = (UniqueConstraint("source_id", "external_user_id", name="uq_medical_external_actor"),)
     id = Column(Integer, primary_key=True)
-    user_id = Column(Integer, ForeignKey("usuarios.id"), unique=True, nullable=False)
+    user_id = Column(Integer, ForeignKey("usuarios.id"), unique=True, nullable=True)
+    display_name = Column(String(180), nullable=False, default="")
+    external_user_id = Column(String(100))
     source_id = Column(Integer, ForeignKey("medical_sources.id"), nullable=False, index=True)
     manager_id = Column(Integer, ForeignKey("medical_profiles.id"))
     kind = Column(String(25), nullable=False)

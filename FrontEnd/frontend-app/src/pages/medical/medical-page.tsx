@@ -11,7 +11,7 @@ type Value = string | number | boolean | null;
 type Row = Record<string, Value>;
 type Option = { value: string; label: string };
 type Field = { name: string; label: string; type?: string; options?: Option[]; optional?: boolean; help?: string };
-type Lookup = { plans: Row[]; sources: Row[]; profiles: Row[]; users: { id: number; name: string }[]; emissions: Row[]; global_access: boolean };
+type Lookup = { plans: Row[]; sources: Row[]; profiles: Row[]; users: { id: number; name: string; is_active: boolean; roles: string[] }[]; emissions: Row[]; global_access: boolean };
 type Listing = { items: Row[]; total: number; count?: number; sales?: string; collected?: string; pending?: string; commissions?: string; provider_cost?: string };
 type Detail = Row & { items?: never; vouchers?: never };
 type LiquidationDetail = { items: Row[]; vouchers: Row[]; voucher_total: string; deposit_required: string; status: string };
@@ -20,7 +20,7 @@ const empty: Lookup = { plans: [], sources: [], profiles: [], users: [], emissio
 const titles: Record<string, string> = { plans: "Planes de asistencia", network: "Red comercial", emissions: "Emisiones", dispatches: "Comunicaciones", liquidations: "Liquidaciones", billing: "Facturación", reports: "Reportes comerciales" };
 const descriptions: Record<string, string> = {
   plans: "Precios, vigencia y comisiones para nuevas emisiones. Las ventas anteriores conservan sus valores.",
-  network: "Orígenes, responsables y emisores vinculados a los usuarios de la plataforma.",
+  network: "Participantes comerciales, cuentas de acceso y vínculos con AFOCAT independientes.",
   emissions: "Contrata planes, registra cobros y descarga certificados con verificación QR.",
   dispatches: "Envía la constancia por correo o WhatsApp y consulta el resultado de cada intento.",
   liquidations: "Prepara períodos, adjunta depósitos y concilia los ingresos de la red comercial.",
@@ -28,7 +28,7 @@ const descriptions: Record<string, string> = {
   reports: "Ventas, recaudación y comisiones dentro de tu ámbito comercial.",
 };
 const icons = { plans: HeartPulse, network: Users, emissions: FileText, dispatches: Send, liquidations: Wallet, billing: Receipt, reports: ChartNoAxesCombined };
-const labels: Record<string, string> = { issued: "Emitido", cancelled: "Anulado", pending: "Pendiente", collected_by_seller: "Cobrado por vendedor", paid_to_abissol: "Ingresado a ABISSOL", settled: "Liquidado", cash: "Efectivo", transfer: "Transferencia", card: "Tarjeta", online: "En línea", source_admin: "Administrador de origen", responsible: "Responsable", emitter: "Emisor", seller: "Vendedor", meta: "META Assistance", platform: "Plataforma", draft: "Borrador", submitted: "Presentado", approved: "Aprobado", observed: "Observado", paid: "Pagado", email: "Correo", whatsapp: "WhatsApp", sent: "Aceptado por proveedor", failed: "No confirmado", sending: "En curso", not_sent: "Sin enviar", boleta: "Boleta", factura: "Factura" };
+const labels: Record<string, string> = { issued: "Emitido", cancelled: "Anulado", pending: "Pendiente", collected_by_seller: "Cobrado por vendedor", paid_to_abissol: "Ingresado a ABISSOL", settled: "Liquidado", cash: "Efectivo", transfer: "Transferencia", card: "Tarjeta", online: "En línea", source_admin: "Coordinador de origen", responsible: "Vendedor responsable", emitter: "Emisor dependiente", internal: "ABISSOL directo", afocat: "AFOCAT asociada", partner: "Entidad asociada", seller: "Vendedor", meta: "META Assistance", platform: "Plataforma", draft: "Borrador", submitted: "Presentado", approved: "Aprobado", observed: "Observado", paid: "Pagado", email: "Correo", whatsapp: "WhatsApp", sent: "Aceptado por proveedor", failed: "No confirmado", sending: "En curso", not_sent: "Sin enviar", boleta: "Boleta", factura: "Factura" };
 const money = (v: Value | undefined) => new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }).format(Number(v || 0));
 const opts = (...values: string[]): Option[] => values.map(value => ({ value, label: labels[value] || value }));
 const selectClass = "h-10 w-full rounded-md border bg-background px-3 text-sm";
@@ -69,11 +69,11 @@ export default function MedicalPage({ section }: { section: string }) {
     finally { if (version === requestVersion.current) setLoading(false); }
   }, [section, page, query, start, end]);
   useEffect(() => { void load(); }, [load]);
-  const userName = (id: Value) => lookup.users.find(u => u.id === Number(id))?.name || `Usuario ${id}`;
-  const profileName = (id: Value) => { const p = lookup.profiles.find(p => p.id === Number(id)); return p ? userName(p.user_id) : `Perfil ${id}`; };
+  const userName = (id: Value) => { const account = lookup.users.find(u => u.id === Number(id)); return account ? `${account.name}${account.is_active ? "" : " · Cuenta desactivada"}` : `Usuario ${id}`; };
+  const profileName = (id: Value) => { const p = lookup.profiles.find(p => p.id === Number(id)); return p ? String(p.display_name || userName(p.user_id)) : `Perfil ${id}`; };
   const planOptions = lookup.plans.filter(p => p.active).map(p => ({ value: String(p.id), label: `${p.name} · ${money(p.price)}` }));
   const sourceOptions = lookup.sources.filter(p => p.active).map(p => ({ value: String(p.id), label: String(p.name) }));
-  const profileOptions = (kind?: string) => lookup.profiles.filter(p => p.active && (kind ? p.kind === kind : p.kind !== "source_admin")).map(p => ({ value: String(p.id), label: `${userName(p.user_id)} · ${labels[String(p.kind)]}` }));
+  const profileOptions = (kind?: string) => lookup.profiles.filter(p => p.active && (section !== "emissions" || p.user_id) && (kind ? p.kind === kind : p.kind !== "source_admin")).map(p => ({ value: String(p.id), label: `${p.display_name || userName(p.user_id)} · ${labels[String(p.kind)]}` }));
   const emissionField: Field = { name: "issuance_id", label: "Emisión", options: lookup.emissions.map(e => ({ value: String(e.id), label: `${e.code} · ${e.customer}` })), help: "Busca por certificado, titular o documento dentro de tu ámbito." };
   const reason: Field = { name: "reason", label: "Motivo / detalle", type: "textarea", help: "Se conservará en auditoría (mínimo cinco caracteres)." };
   function planForm(row?: Row) {
@@ -85,12 +85,23 @@ export default function MedicalPage({ section }: { section: string }) {
     ] });
   }
   function sourceForm(row?: Row) {
-    setModal({ title: row ? "Editar origen" : "Nuevo origen", path: `/sources${row ? `/${row.id}` : ""}`, method: row ? "put" : "post", initial: row || { active: true }, fields: [{ name: "code", label: "Código (mayúsculas)" }, { name: "name", label: "Nombre" }, { name: "active", label: "Origen activo", type: "checkbox" }] });
+    setModal({ title: row ? "Editar origen" : "Nuevo origen", path: `/sources${row ? `/${row.id}` : ""}`, method: row ? "put" : "post", initial: row || { active: true, kind: "afocat" }, fields: [
+      { name: "code", label: "Código (mayúsculas)" }, { name: "name", label: "Nombre de la entidad" },
+      { name: "kind", label: "Tipo de origen", options: opts("internal", "afocat", "partner") },
+      { name: "external_key", label: "Identificador de integración", optional: true, help: "Ejemplo: externa_alp. Solo para entidades externas; no es una contraseña." },
+      { name: "active", label: "Origen activo", type: "checkbox" },
+    ] });
   }
   function profileForm(row?: Row) {
-    setModal({ title: row ? "Editar perfil comercial" : "Vincular usuario", path: `/profiles${row ? `/${row.id}` : ""}`, method: row ? "put" : "post", initial: row || { kind: "responsible", active: true }, description: "Los permisos de menú se asignan en Usuarios y seguridad → Accesos. Este perfil determina qué registros puede ver el usuario.", fields: [
-      { name: "user_id", label: "Usuario", options: lookup.users.map(u => ({ value: String(u.id), label: u.name })) }, { name: "source_id", label: "Origen", options: sourceOptions },
-      { name: "kind", label: "Función comercial", options: opts("source_admin", "responsible", "emitter") }, { name: "manager_id", label: "Responsable (solo emisores)", options: profileOptions("responsible"), optional: true }, { name: "active", label: "Perfil activo", type: "checkbox" },
+    setModal({ title: row ? "Editar participante" : "Nuevo participante", path: `/profiles${row ? `/${row.id}` : ""}`, method: row ? "put" : "post", initial: row || { kind: "responsible", active: true, apply_role: false }, description: "La cuenta permite entrar al portal; el perfil define a quién representa y qué ventas puede consultar. Un participante externo puede existir sin cuenta ABISSOL.", fields: [
+      { name: "display_name", label: "Nombre de la persona o punto de venta", optional: true, help: "Obligatorio si no vinculas una cuenta." },
+      { name: "source_id", label: "Origen / entidad", options: sourceOptions },
+      { name: "kind", label: "Función comercial", options: opts("source_admin", "responsible", "emitter") },
+      { name: "manager_id", label: "Vendedor responsable (solo emisores)", options: profileOptions("responsible"), optional: true },
+      { name: "external_user_id", label: "ID en la plataforma externa", optional: true, help: "El ID pertenece a la entidad de origen, no a la tabla de usuarios ABISSOL." },
+      { name: "user_id", label: "Cuenta de acceso ABISSOL (opcional para externos)", options: lookup.users.map(u => ({ value: String(u.id), label: `${u.name}${u.is_active ? "" : " · Cuenta desactivada"}` })), optional: true },
+      { name: "apply_role", label: "Asignar rol comercial recomendado", type: "checkbox", help: "Requiere cuenta. Sustituye solo su rol comercial; conserva roles de plataforma y excepciones individuales." },
+      { name: "active", label: "Participante activo", type: "checkbox" },
     ] });
   }
   function create() {
@@ -122,7 +133,7 @@ export default function MedicalPage({ section }: { section: string }) {
   const action = (row: Row, name: string, title: string) => setModal({ title, path: `/liquidations/${row.id}/${name}`, fields: [reason], description: "Esta acción modifica el estado de la liquidación y queda registrada en auditoría." });
   const columns: Record<string, [string, (r: Row) => string][]> = {
     plans: [["Plan", r => `${r.code} · ${r.name}`], ["Precio", r => money(r.price)], ["Proveedor", r => money(r.provider_cost)], ["Vendedor", r => money(r.seller_commission)], ["Vigencia", r => `${r.validity_days} días`], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
-    network: [["Usuario", r => userName(r.user_id)], ["Función", r => labels[String(r.kind)]], ["Origen", r => String(lookup.sources.find(s => s.id === r.source_id)?.name || r.source_id)], ["Responsable", r => r.manager_id ? profileName(r.manager_id) : "—"], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
+    network: [["Participante", r => String(r.display_name || userName(r.user_id))], ["Acceso al portal", r => r.user_id ? userName(r.user_id) : "Sin cuenta ABISSOL"], ["Roles de acceso", r => r.user_id ? (lookup.users.find(u => u.id === Number(r.user_id))?.roles || []).join(", ") || "Sin rol activo" : "Sin acceso al portal"], ["ID externo", r => String(r.external_user_id || "—")], ["Función", r => labels[String(r.kind)]], ["Origen", r => String(lookup.sources.find(s => s.id === r.source_id)?.name || r.source_id)], ["Responsable", r => r.manager_id ? profileName(r.manager_id) : "—"], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     emissions: [["Certificado", r => String(r.code)], ["Titular", r => `${r.customer} · ${r.document_number}`], ["Plan", r => String(r.plan_name)], ["Vigencia", r => `${r.starts_on} → ${r.ends_on}`], ["Importe", r => money(r.price)], ["Estado", r => `${labels[String(r.status)]} · ${labels[String(r.payment_status)]}`]],
     dispatches: [["Emisión", r => String(lookup.emissions.find(e => e.id === r.issuance_id)?.code || `#${r.issuance_id}`)], ["Canal", r => labels[String(r.channel)]], ["Destinatario", r => String(r.recipient)], ["Estado", r => labels[String(r.status)]], ["Intentos", r => String(r.attempts)], ["Detalle", r => String(r.error || "—")]],
     liquidations: [["Número", r => `LIQ-${r.id}`], ["Tipo", r => labels[String(r.kind)]], ["Responsable", r => profileName(r.responsible_id)], ["Período", r => `${r.starts_on} → ${r.ends_on}`], ["Ventas", r => money(r.sales_total)], ["Comisión / proveedor", r => money(r.commission_total)], ["Depósito", r => money(r.deposit_required)], ["Estado", r => labels[String(r.status)]]],
@@ -139,12 +150,13 @@ export default function MedicalPage({ section }: { section: string }) {
   const visible = section === "plans" || section === "network" ? data.items.filter(r => (JSON.stringify(r) + (section === "network" ? userName(r.user_id) : "")).toLowerCase().includes(query.toLowerCase())) : data.items;
   return <main className="space-y-6 p-4 md:p-6">
     <header className="flex flex-wrap items-start justify-between gap-4"><div className="flex gap-3"><span className="rounded-xl bg-emerald-500/10 p-3 text-emerald-600"><Icon className="size-6" /></span><div><p className="text-xs font-medium uppercase tracking-widest text-emerald-600">Negocio ABISSOL</p><h1 className="text-2xl font-semibold">{titles[section]}</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">{descriptions[section]}</p></div></div>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="size-4" /> Actualizar</Button>{editor && section !== "reports" && (section !== "plans" || manager) && (section !== "network" || (manager && lookup.global_access)) && <Button className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={create}><Plus className="size-4" />{section === "network" ? "Vincular usuario" : section === "dispatches" ? "Enviar constancia" : "Nuevo registro"}</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="size-4" /> Actualizar</Button>{editor && section !== "reports" && (section !== "plans" || manager) && (section !== "network" || (manager && lookup.global_access)) && <Button className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={create}><Plus className="size-4" />{section === "network" ? "Nuevo participante" : section === "dispatches" ? "Enviar constancia" : "Nuevo registro"}</Button>}</div>
     </header>
     {error && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
     {notice && <div role="status" className="rounded-lg border border-emerald-300 bg-emerald-50 p-3 text-sm text-emerald-900">{notice}</div>}
     {section === "billing" && <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><strong>Preparación de comprobantes.</strong> Pendiente configurar y validar RUC emisor, series, certificado digital e integración SUNAT. Los borradores no tienen validez tributaria.</div>}
-    {section === "network" && <section className="rounded-xl border bg-card p-4"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Orígenes comerciales</h2>{manager && lookup.global_access && <Button size="sm" variant="outline" onClick={() => sourceForm()}>Agregar origen</Button>}</div><div className="flex flex-wrap gap-2">{lookup.sources.map(s => <button disabled={!manager || !lookup.global_access} key={String(s.id)} onClick={() => sourceForm(s)} className="rounded-lg border px-3 py-2 text-left text-sm disabled:opacity-80">{String(s.name)} <span className="text-muted-foreground">· {String(s.code)}{!s.active && " · Inactivo"}</span></button>)}{!lookup.sources.length && <p className="text-sm text-muted-foreground">Crea un origen y vincula un responsable para comenzar a emitir.</p>}</div></section>}
+    {section === "network" && <div className="grid gap-3 md:grid-cols-3">{[["Vendedor responsable", "Puede emitir y consultar sus ventas y las de sus emisores. Prepara sus liquidaciones."], ["Emisor dependiente", "Registra y consulta sus propias emisiones. La comisión y liquidación corresponden a su responsable."], ["Coordinador de origen", "Consulta la operación de su entidad y prepara sus liquidaciones. No administra la plataforma ni aprueba pagos."]].map(([title, text]) => <div key={title} className="rounded-xl border bg-card p-4"><h2 className="font-medium">{title}</h2><p className="mt-2 text-sm text-muted-foreground">{text}</p></div>)}</div>}
+    {section === "network" && <section className="rounded-xl border bg-card p-4"><div className="mb-3 flex items-center justify-between"><h2 className="font-semibold">Orígenes comerciales</h2>{manager && lookup.global_access && <Button size="sm" variant="outline" onClick={() => sourceForm()}>Agregar origen</Button>}</div><div className="flex flex-wrap gap-2">{lookup.sources.map(s => <button disabled={!manager || !lookup.global_access} key={String(s.id)} onClick={() => sourceForm(s)} className="rounded-lg border px-3 py-2 text-left text-sm disabled:opacity-80">{String(s.name)} <span className="text-muted-foreground">· {labels[String(s.kind)] || s.kind} · {String(s.code)}{!s.active && " · Inactivo"}</span></button>)}{!lookup.sources.length && <p className="text-sm text-muted-foreground">Crea un origen y vincula un responsable para comenzar a emitir.</p>}</div></section>}
     {(section === "emissions" || section === "reports") && <div className="flex flex-wrap items-end gap-3"><label className="text-sm">Desde<Input aria-label="Desde" type="date" value={start} onChange={e => { setStart(e.target.value); setPage(0); }} /></label><label className="text-sm">Hasta<Input aria-label="Hasta" type="date" value={end} onChange={e => { setEnd(e.target.value); setPage(0); }} /></label></div>}
     {section === "reports" && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[["Emisiones", String(data.count || 0)], ["Ventas", money(data.sales)], ["Recaudado", money(data.collected)], ["Por cobrar", money(data.pending)], ["Comisiones", money(data.commissions)]].map(([title, value]) => <div className="rounded-xl border bg-card p-5" key={title}><p className="text-sm text-muted-foreground">{title}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div>}
     <section className="overflow-hidden rounded-xl border bg-card">
@@ -173,7 +185,7 @@ function BusinessForm({ modal, close, saved }: { modal: Modal; close: () => void
     const payload: Record<string, Value> = {};
     modal.fields.forEach(f => {
       const value = String(form.get(f.name) || "").trim();
-      payload[f.name] = f.type === "checkbox" ? form.has(f.name) : f.name.endsWith("_id") ? value ? Number(value) : null : f.type === "number" ? Number(value) : value;
+      payload[f.name] = f.type === "checkbox" ? form.has(f.name) : (f.name === "external_user_id" || f.name === "external_key") ? value || null : f.name.endsWith("_id") ? value ? Number(value) : null : f.type === "number" ? Number(value) : value;
     });
     try {
       const response = await api[modal.method || "post"](`/medical${modal.path}`, modal.fields.some(f => f.type === "file") ? form : payload);

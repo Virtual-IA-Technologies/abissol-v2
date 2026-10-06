@@ -1,5 +1,18 @@
 # Estado actual
 
+## Identidad y permisos comerciales — 05/10/2026
+
+Red comercial distingue entidades, participantes externos y cuentas de acceso.
+Origen interno/AFOCAT/aliado, clave externa única e ID de participante único por
+origen. Cuenta opcional para externos y vinculación posterior sin duplicar perfil.
+Tres roles comerciales mínimos, asignación explícita auditada y conservación de
+roles administrativos/excepciones. Origen inactivo bloquea el alcance comercial.
+Se conserva PROGRAMAS y su orden. Migración 0004_commercial_identity.
+
+Consulta productiva limitada y de solo lectura en Laravel/La Primera; no se
+cambiaron conectores ni datos reales. La recepción externa en V2 queda pendiente
+del conector autenticado por entidad. Ver `03-MODULOS/IDENTIDAD_COMERCIAL.md`.
+
 ## Corrección de navegación al reorganizar menús — 05/10/2026
 
 El editor recalculaba rutas de negocio como `/medical/medical-plans` al guardar

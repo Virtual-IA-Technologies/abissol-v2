@@ -78,4 +78,6 @@ def seed_platform(db: Session):
     if not db.query(MedicalSource.id).filter_by(code="ABISSOL").first():
         db.add(MedicalSource(code="ABISSOL", name="ABISSOL"))
     db.flush()
+    from .services.commercial_roles import seed_commercial_roles
+    seed_commercial_roles(db)
     return roles

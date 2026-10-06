@@ -27,6 +27,7 @@ from ..schemas.medical import (PlanInput, SourceInput, ProfileInput, IssuanceInp
 from ..services.access_control import require_access, ensure_option_access
 from ..services.email import send_email
 from ..services.whatsapp import send_whatsapp
+from ..services.commercial_roles import seed_commercial_roles, ROLE_NAMES
 from ..utils.jwt import get_current_identity
 from .audit import audit_change
 
@@ -45,7 +46,7 @@ def admin(user):
 
 
 def profile(db, user):
-    return db.query(Profile).filter_by(user_id=user.id, active=True).first()
+    return db.query(Profile).join(Source, Source.id == Profile.source_id).filter(Profile.user_id == user.id, Profile.active.is_(True), Source.active.is_(True)).first()
 
 
 def profiles_scope(db, user):
@@ -112,13 +113,13 @@ def lookups(section: str, db: Session = Depends(get_db), identity=Depends(get_cu
     sources = db.query(Source)
     if not admin(user):
         sources = sources.filter(Source.id.in_(source_ids))
-    users = db.query(Usuario).filter(Usuario.is_active.is_(True), Usuario.deleted_at.is_(None))
+    users = db.query(Usuario).filter(Usuario.deleted_at.is_(None))
     if section != "network" or not admin(user):
         users = users.filter(Usuario.id.in_([p.user_id for p in people]))
     return {"plans": [dump(p) for p in db.query(Plan).order_by(Plan.name)],
             "sources": [dump(s) for s in sources.order_by(Source.name)],
             "profiles": [dump(p) for p in people],
-            "users": [{"id": u.id, "name": f"{u.nombre} {u.apellido or ''}".strip()} for u in users],
+            "users": [{"id": u.id, "name": f"{u.nombre} {u.apellido or ''}".strip(), "is_active": u.is_active, "roles": [r.nombre for r in u.active_roles()]} for u in users],
             "emissions": [{"id": e.id, "code": e.code, "customer": e.customer} for e in scope(db, user).filter(Issuance.status == "issued").order_by(Issuance.id.desc()).limit(200)] if section in {"billing", "dispatches"} else [],
             "global_access": admin(user), "fiscal_enabled": False}
 
@@ -174,6 +175,8 @@ def global_only(user):
 @router.post("/sources")
 def create_source(payload: SourceInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-network", "gestor"))):
     global_only(user)
+    if payload.kind == "internal" and payload.external_key:
+        raise HTTPException(422, "Un origen interno no utiliza clave de integración externa")
     return save(db, request, user, Source(**payload.model_dump()))
 
 
@@ -182,14 +185,30 @@ def update_source(ident: int, payload: SourceInput, request: Request, db: Sessio
     global_only(user)
     row = find(db.query(Source), ident, True)
     before = dump(row)
+    if (row.kind != payload.kind or row.external_key != payload.external_key) and db.query(Profile.id).filter_by(source_id=ident).first():
+        raise HTTPException(409, "El origen ya tiene participantes; su tipo y clave externa identifican vínculos históricos")
+    if payload.kind == "internal" and payload.external_key:
+        raise HTTPException(422, "Un origen interno no utiliza clave de integración externa")
     for k, v in payload.model_dump().items():
         setattr(row, k, v)
     return save(db, request, user, row, before)
 
 
 def validate_profile(db, payload, ident=None):
-    find(db.query(Usuario).filter(Usuario.is_active.is_(True), Usuario.deleted_at.is_(None)), payload.user_id)
-    find(db.query(Source).filter_by(active=True), payload.source_id)
+    account = find(db.query(Usuario).filter(Usuario.deleted_at.is_(None)), payload.user_id) if payload.user_id else None
+    source = find(db.query(Source).filter_by(active=True), payload.source_id)
+    if not payload.display_name:
+        if not account:
+            raise HTTPException(422, "Indica el nombre del participante externo")
+        payload.display_name = f"{account.nombre} {account.apellido or ''}".strip()
+    if source.kind == "internal" and (not account or payload.external_user_id):
+        raise HTTPException(422, "Un participante interno requiere cuenta ABISSOL y no lleva ID externo")
+    if payload.external_user_id and not source.external_key:
+        raise HTTPException(422, "Configura la clave externa del origen antes de vincular identificadores")
+    if not account and not payload.external_user_id:
+        raise HTTPException(422, "Un participante sin cuenta requiere su identificador en la plataforma externa")
+    if payload.apply_role and not account:
+        raise HTTPException(422, "Los permisos se asignan a una cuenta de acceso; desmarca la asignación de rol")
     if payload.kind == "emitter":
         manager = find(db.query(Profile).filter_by(active=True, kind="responsible", source_id=payload.source_id), payload.manager_id)
         if manager.id == ident:
@@ -198,11 +217,24 @@ def validate_profile(db, payload, ident=None):
         raise HTTPException(422, "Solo un emisor depende de un responsable")
 
 
+def apply_commercial_role(db, payload, request, actor):
+    if not payload.apply_role:
+        return
+    account = db.get(Usuario, payload.user_id)
+    before = {"roles": [r.nombre for r in account.roles]}
+    roles = seed_commercial_roles(db)
+    account.roles = [r for r in account.roles if r.nombre not in ROLE_NAMES.values()] + [roles[payload.kind]]
+    audit_change(db, request, actor, "commercial_account_roles", account.id, before=before,
+        after={"roles": [r.nombre for r in account.roles]}, module="abissol_medical",
+        detail="Asignación explícita de rol comercial; se conservan roles de plataforma y accesos individuales.")
+
+
 @router.post("/profiles")
 def create_profile(payload: ProfileInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-network", "gestor"))):
     global_only(user)
     validate_profile(db, payload)
-    return save(db, request, user, Profile(**payload.model_dump()))
+    apply_commercial_role(db, payload, request, user)
+    return save(db, request, user, Profile(**payload.model_dump(exclude={"apply_role"})))
 
 
 @router.put("/profiles/{ident}")
@@ -211,12 +243,15 @@ def update_profile(ident: int, payload: ProfileInput, request: Request, db: Sess
     row = find(db.query(Profile), ident, True)
     before = dump(row)
     validate_profile(db, payload, ident)
-    if any(getattr(row, k) != getattr(payload, k) for k in ("user_id", "source_id", "kind", "manager_id")) and (
+    if any(getattr(row, k) != getattr(payload, k) for k in ("source_id", "kind", "manager_id", "external_user_id")) and (
         db.query(Issuance.id).filter(or_(Issuance.emitter_id == ident, Issuance.responsible_id == ident)).first()
         or db.query(Profile.id).filter_by(manager_id=ident).first()
     ):
         raise HTTPException(409, "Este perfil ya tiene emisiones o emisores; conserva su estructura y usa activo/inactivo")
-    for k, v in payload.model_dump().items():
+    if row.user_id and row.user_id != payload.user_id:
+        raise HTTPException(409, "La cuenta vinculada identifica al participante; no puede transferirse a otra persona")
+    apply_commercial_role(db, payload, request, user)
+    for k, v in payload.model_dump(exclude={"apply_role"}).items():
         setattr(row, k, v)
     return save(db, request, user, row, before)
 
@@ -248,14 +283,14 @@ def create_emission(payload: IssuanceInput, request: Request, db: Session = Depe
     if payload.starts_on <= today:
         raise HTTPException(422, "La vigencia debe comenzar desde mañana (hora de Lima)")
     emitter = find(profiles_scope(db, user).filter(Profile.active.is_(True)), payload.emitter_id)
+    if emitter.user_id is None:
+        raise HTTPException(422, "Este participante es externo sin acceso al portal; sus emisiones deben ingresar por su integración")
+    if payload.external_source or payload.external_reference:
+        raise HTTPException(422, "El portal registra emisiones directas. La identidad de integración se valida por un conector externo autenticado")
     if emitter.kind == "source_admin":
         raise HTTPException(422, "Selecciona un responsable o emisor comercial")
     find(db.query(Source).filter_by(active=True), emitter.source_id)
     responsible = find(db.query(Profile).filter_by(active=True, kind="responsible", source_id=emitter.source_id), emitter.manager_id if emitter.kind == "emitter" else emitter.id)
-    if payload.external_source:
-        existing = scope(db, user).filter_by(external_source=payload.external_source, external_reference=payload.external_reference).first()
-        if existing:
-            raise HTTPException(409, f"La referencia externa ya corresponde a {existing.code}")
     plan = find(db.query(Plan).filter_by(active=True), payload.plan_id, True)
     plan.counter += 1
     values = payload.model_dump()

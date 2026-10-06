@@ -30,14 +30,19 @@ class PlanInput(Payload):
 class SourceInput(Payload):
     code: str = Field(min_length=2, max_length=30, pattern=r"^[A-Z0-9_-]+$")
     name: str = Field(min_length=2, max_length=120)
+    kind: Literal["internal", "afocat", "partner"] = "internal"
+    external_key: str | None = Field(default=None, max_length=80, pattern=r"^[a-z0-9_-]+$")
     active: bool = True
 
 class ProfileInput(Payload):
-    user_id: int = Field(gt=0)
+    user_id: int | None = Field(default=None, gt=0)
+    display_name: str = Field(default="", max_length=180)
+    external_user_id: str | None = Field(default=None, min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.-]+$")
     source_id: int = Field(gt=0)
     manager_id: int | None = None
     kind: Literal["source_admin", "responsible", "emitter"]
     active: bool = True
+    apply_role: bool = False
 
 class IssuanceInput(Payload):
     plan_id: int = Field(gt=0)
