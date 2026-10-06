@@ -1,3 +1,4 @@
+import { SearchableSelect } from '@/components/searchable-select';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined } from "lucide-react";
 import axios from "axios";
@@ -33,7 +34,6 @@ const icons = { plans: HeartPulse, network: Users, emissions: FileText, dispatch
 const labels: Record<string, string> = { accepted: "Aceptado por SUNAT", rejected: "Rechazado", error: "Error", generated: "Generado", issued: "Emitido", cancelled: "Anulado", pending: "Pendiente", collected_by_seller: "Cobrado por vendedor", paid_to_abissol: "Ingresado a ABISSOL", settled: "Liquidado", cash: "Efectivo", transfer: "Transferencia", card: "Tarjeta", online: "En línea", source_admin: "Coordinador de origen", responsible: "Vendedor responsable", emitter: "Emisor dependiente", internal: "ABISSOL directo", afocat: "AFOCAT asociada", partner: "Entidad asociada", seller: "Vendedor", meta: "META Assistance", platform: "Plataforma", draft: "Borrador", submitted: "Presentado", approved: "Aprobado", observed: "Observado", paid: "Pagado", email: "Correo", whatsapp: "WhatsApp", sent: "Aceptado por proveedor", failed: "No confirmado", sending: "En curso", not_sent: "Sin enviar", boleta: "Boleta", factura: "Factura" };
 const money = (v: Value | undefined) => new Intl.NumberFormat("es-PE", { style: "currency", currency: "PEN" }).format(Number(v || 0));
 const opts = (...values: string[]): Option[] => values.map(value => ({ value, label: labels[value] || value }));
-const selectClass = "h-10 w-full rounded-md border bg-background px-3 text-sm";
 function errorText(error: unknown) {
   if (!axios.isAxiosError(error)) return "No se pudo completar la operación";
   const detail = error.response?.data?.detail;
@@ -183,6 +183,8 @@ function BusinessForm({ modal, close, saved }: { modal: Modal; close: () => void
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setBusy(true); setError("");
     const form = new FormData(event.currentTarget);
+    const missing = modal.fields.find(f => !f.optional && (f.options || f.name === "issuance_id") && !form.get(f.name));
+    if (missing) { setError(`Selecciona ${missing.label.toLowerCase()}.`); setBusy(false); return; }
     const payload: Record<string, Value> = {};
     modal.fields.forEach(f => {
       const value = String(form.get(f.name) || "").trim();
@@ -193,22 +195,28 @@ function BusinessForm({ modal, close, saved }: { modal: Modal; close: () => void
       await saved(response.data);
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
-  return <Dialog open onOpenChange={open => { if (!open && !busy) close(); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{modal.title}</DialogTitle><DialogDescription>{modal.description || "Completa los datos para guardar la operación."}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}<div className="grid gap-4 sm:grid-cols-2">{modal.fields.map(f => <label key={f.name} className={`${f.type === "textarea" ? "sm:col-span-2" : ""} space-y-1 text-sm`}><span className="font-medium">{f.label}</span>{f.name === "issuance_id" ? <EmissionPicker section={modal.path.startsWith("/billing") ? "billing" : "dispatches"} selected={modal.initial?.issuance_id} /> : f.options ? <select name={f.name} required={!f.optional} defaultValue={String(modal.initial?.[f.name] || "")} className={selectClass}><option value="">Seleccionar</option>{f.options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select> : f.type === "checkbox" ? <input className="ml-3 size-4 accent-emerald-700" name={f.name} type="checkbox" defaultChecked={Boolean(modal.initial?.[f.name])} /> : f.type === "textarea" ? <textarea className="min-h-24 w-full rounded-md border bg-background p-3" name={f.name} required minLength={5} maxLength={1000} /> : <Input name={f.name} type={f.type === "money" ? "number" : f.type || "text"} step={f.type === "money" ? "0.01" : undefined} min={f.type === "money" ? 0 : f.type === "number" ? 1 : undefined} required={!f.optional} defaultValue={f.type === "file" ? undefined : String(modal.initial?.[f.name] ?? "")} accept={f.type === "file" ? ".pdf,.png,.jpg,.jpeg" : undefined} />}{f.help && <p className="text-xs text-muted-foreground">{f.help}</p>}</label>)}</div><div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={close} disabled={busy}>Cancelar</Button><Button type="submit" className="bg-emerald-700 text-white hover:bg-emerald-800" disabled={busy}>{busy ? "Procesando…" : modal.path.includes("dispatches") ? "Confirmar envío" : "Guardar"}</Button></div></form></DialogContent></Dialog>;
+  return <Dialog open onOpenChange={open => { if (!open && !busy) close(); }}><DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{modal.title}</DialogTitle><DialogDescription>{modal.description || "Completa los datos para guardar la operación."}</DialogDescription></DialogHeader><form onSubmit={submit} className="space-y-4">{error && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}<div className="grid gap-4 sm:grid-cols-2">{modal.fields.map(f => <label key={f.name} className={`${f.type === "textarea" ? "sm:col-span-2" : ""} space-y-1 text-sm`}><span className="font-medium">{f.label}</span>{f.name === "issuance_id" ? <EmissionPicker section={modal.path.startsWith("/billing") ? "billing" : "dispatches"} selected={modal.initial?.issuance_id} /> : f.options ? <FormSelect name={f.name} label={f.label} options={f.options} initial={String(modal.initial?.[f.name] || "")} optional={f.optional} disabled={busy} /> : f.type === "checkbox" ? <input className="ml-3 size-4 accent-emerald-700" name={f.name} type="checkbox" defaultChecked={Boolean(modal.initial?.[f.name])} /> : f.type === "textarea" ? <textarea className="min-h-24 w-full rounded-md border bg-background p-3" name={f.name} required minLength={5} maxLength={1000} /> : <Input name={f.name} type={f.type === "money" ? "number" : f.type || "text"} step={f.type === "money" ? "0.01" : undefined} min={f.type === "money" ? 0 : f.type === "number" ? 1 : undefined} required={!f.optional} defaultValue={f.type === "file" ? undefined : String(modal.initial?.[f.name] ?? "")} accept={f.type === "file" ? ".pdf,.png,.jpg,.jpeg" : undefined} />}{f.help && <p className="text-xs text-muted-foreground">{f.help}</p>}</label>)}</div><div className="flex justify-end gap-2 border-t pt-4"><Button type="button" variant="outline" onClick={close} disabled={busy}>Cancelar</Button><Button type="submit" className="bg-emerald-700 text-white hover:bg-emerald-800" disabled={busy}>{busy ? "Procesando…" : modal.path.includes("dispatches") ? "Confirmar envío" : "Guardar"}</Button></div></form></DialogContent></Dialog>;
 }
 
 
+function FormSelect({ name, label, options, initial, optional, disabled }: { name: string; label: string; options: Option[]; initial: string; optional?: boolean; disabled?: boolean }) {
+  const [value, setValue] = useState(initial);
+  return <><input type="hidden" name={name} value={value} /><SearchableSelect aria-label={label} options={optional ? [{value:'',label:'Sin selección'}, ...options] : options} value={value} onValueChange={setValue} disabled={disabled} /></>;
+}
+
 function EmissionPicker({ section, selected }: { section: string; selected?: Value }) {
+  const [value, setValue] = useState(String(selected || ""));
   const [search, setSearch] = useState("");
   const [options, setOptions] = useState<Option[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
     const controller = new AbortController();
     const timer = setTimeout(() => {
-      api.get<Option[]>("/medical/issuance-options", { params: { section, search, selected: selected || undefined }, signal: controller.signal })
+      api.get<Option[]>("/medical/issuance-options", { params: { section, search, selected: value || undefined }, signal: controller.signal })
         .then(r => { setOptions(r.data); setError(""); })
         .catch(e => { if (!controller.signal.aborted) setError(errorText(e)); });
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [section, search, selected]);
-  return <span className="block space-y-2"><Input aria-label="Buscar emisión" placeholder="Buscar certificado o titular…" value={search} onChange={e => setSearch(e.target.value)} /><select aria-label="Emisión seleccionada" className={selectClass} name="issuance_id" required defaultValue={String(selected || "")} key={options.map(o => o.value).join(",")}><option value="">Seleccionar emisión</option>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select>{error && <span role="alert" className="text-red-700">{error}</span>}</span>;
+  }, [section, search, value]);
+  return <span className="block space-y-2"><input type="hidden" name="issuance_id" value={value} /><SearchableSelect aria-label="Emisión seleccionada" options={options} value={value} onValueChange={setValue} onSearchChange={setSearch} searchPlaceholder="Buscar certificado o titular…" placeholder="Seleccionar emisión" />{error && <span role="alert" className="text-red-700">{error}</span>}</span>;
 }

@@ -1,5 +1,21 @@
 # Estado actual
 
+## Corrección APIperú y selectores — 05/10/2026
+
+El servidor registraba ResponseValidationError en response.ubigeo: APIperú devuelve
+una lista para DNI y el contrato público requiere texto. Se normaliza al código
+del distrito, admitiendo también texto, lista vacía y datos ausentes. Se conserva
+la consulta automática a ocho dígitos y los permisos de edición. Tres pruebas
+aisladas verifican contrato, autorización y fechas sin consultar documentos reales.
+
+Nueva emisión y los demás formularios comerciales usan SearchableSelect, con
+búsqueda enfocada al abrir, filtro sin distinción de tildes y validación de campos
+obligatorios. El selector de emisiones busca en servidor y conserva su selección.
+La regla queda documentada en AGENTS.md para formularios futuros.
+TypeScript, lint y pruebas de navegador correctos: foco automático, búsqueda sin
+tildes, campos obligatorios, búsqueda remota y valores enviados por FormData.
+Pruebas con respuestas y envíos interceptados, sin crear ventas ni comunicaciones.
+
 ## Nueva emisión y consulta DNI — 05/10/2026
 
 Formulario dedicado con secciones de programa/emisor, titular y vigencia/pago;

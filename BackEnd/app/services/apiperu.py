@@ -27,7 +27,7 @@ def lookup_document(document_type: str, document_number: str) -> ApiPeruResult:
     try:
         response = httpx.post(
             f"{settings.apiperu_base_url}/{document_type}",
-            headers={"Authorization": f"Bearer {settings.apiperu_api_token}"},
+            headers={"Authorization": f"Bearer {settings.apiperu_api_token}", "Accept": "application/json"},
             json={document_type: document_number},
             timeout=settings.apiperu_timeout_seconds,
         )
@@ -56,6 +56,13 @@ def public_document_result(document_type: str, document_number: str, data: dict)
     def first(*keys: str):
         return next((data.get(key) for key in keys if data.get(key) not in (None, "")), None)
 
+    # DNI returns department/province/district codes as a list; RUC uses a string.
+    ubigeo = first("ubigeo_sunat", "ubigeo")
+    if isinstance(ubigeo, list):
+        ubigeo = next((code for code in reversed(ubigeo) if isinstance(code, str) and code.strip()), None)
+    if not isinstance(ubigeo, str):
+        ubigeo = None
+
     structured_name = ' '.join(str(value).strip() for value in (
         first('nombres'), first('apellido_paterno', 'apellidoPaterno'), first('apellido_materno', 'apellidoMaterno')
     ) if value)
@@ -70,5 +77,5 @@ def public_document_result(document_type: str, document_number: str, data: dict)
         "status": first("estado"),
         "condition": first("condicion"),
         "address": first("direccion", "direccion_completa"),
-        "ubigeo": first("ubigeo", "ubigeo_sunat"),
+        "ubigeo": ubigeo,
     }

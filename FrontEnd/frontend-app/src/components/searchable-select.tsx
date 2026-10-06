@@ -22,6 +22,7 @@ type CommonProps = {
   className?: string;
   id?: string;
   "aria-label"?: string;
+  onSearchChange?: (search: string) => void;
 };
 
 const normalize = (value: string) => value
@@ -41,12 +42,13 @@ export function SearchableSelect({
   disabled,
   className,
   id,
+  onSearchChange,
   "aria-label": ariaLabel,
 }: CommonProps & { value: string; onValueChange: (value: string) => void }) {
   const [open, setOpen] = useState(false);
   const selected = useMemo(() => options.find((option) => option.value === value), [options, value]);
 
-  return <Popover open={open} onOpenChange={setOpen}>
+  return <Popover open={open} onOpenChange={next => { setOpen(next); if (next) onSearchChange?.(''); }}>
     <PopoverTrigger asChild>
       <Button id={id} type="button" variant="outline" role="combobox" aria-label={ariaLabel} aria-expanded={open} disabled={disabled} className={cn("h-10 w-full justify-between rounded-lg px-3 font-normal", className)}>
         <span className={cn("truncate", !selected && "text-muted-foreground")}>{selected?.label ?? placeholder}</span>
@@ -54,8 +56,8 @@ export function SearchableSelect({
       </Button>
     </PopoverTrigger>
     <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
-      <Command filter={commandFilter}>
-        <CommandInput placeholder={searchPlaceholder} />
+      <Command filter={commandFilter} shouldFilter={!onSearchChange}>
+        <CommandInput autoFocus placeholder={searchPlaceholder} onValueChange={onSearchChange} />
         <CommandList><CommandEmpty>{emptyMessage}</CommandEmpty><CommandGroup>
           {options.map((option) => <CommandItem key={option.value} value={`${option.value} ${option.label} ${option.keywords ?? ""}`} disabled={option.disabled} onSelect={() => { onValueChange(option.value); setOpen(false); }}>
             <Check className={cn("size-4", option.value === value ? "opacity-100" : "opacity-0")} />
