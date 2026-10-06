@@ -64,7 +64,7 @@ export function DesktopNavigation({ layout, items }: { layout: NavigationLayout;
   const { settings } = usePlatformSettings();
   const [iconsExpanded, setIconsExpanded] = useState(false);
   if (layout === "sidebar") return null;
-  const logo = settings.logo_dark_url || settings.logo_light_url || "/favicon.svg";
+  const logo = settings.logo_dark_url || settings.logo_light_url || "/abissol-favicon.png";
   const sections = items.flatMap((item) => {
     const collect = (node: MenuNode): MenuNode[] => [
       ...(node.tipo === "seccion" ? [node] : []),
@@ -85,7 +85,7 @@ export function DesktopNavigation({ layout, items }: { layout: NavigationLayout;
     className={`sticky top-0 z-50 hidden h-svh shrink-0 overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground shadow-sm transition-[width] duration-200 md:flex md:flex-col ${iconsExpanded ? "w-72" : "w-16"}`}
   >
     <div className={`flex h-(--header-height) shrink-0 items-center border-b border-sidebar-border ${iconsExpanded ? "gap-3 px-4" : "justify-center px-2"}`}>
-      <Link to="/inicio" aria-label="Ir al inicio" className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-sidebar-border bg-sidebar-accent/40"><img src={logo} alt="" className="size-7 object-contain" /></Link>
+      <Link to="/inicio" aria-label="Ir al inicio" className="flex size-10 shrink-0 items-center justify-center rounded-full bg-white p-0.5"><img src={logo} alt="Logo de ABISSOL" className="size-9 rounded-full object-contain" /></Link>
       {iconsExpanded && <span className="truncate text-sm font-semibold">{settings.app_title || "ABISSOL"}</span>}
     </div>
     {iconsExpanded ? <ScrollArea className="min-h-0 flex-1 py-2"><NavMain items={items} /></ScrollArea> : <nav aria-label="Navegación principal por iconos" className="flex min-h-0 flex-1 flex-col items-center gap-1.5 overflow-y-auto px-2 py-3">
@@ -97,7 +97,7 @@ export function DesktopNavigation({ layout, items }: { layout: NavigationLayout;
     </div>
   </aside>;
   return <nav aria-label="Navegación principal superior" className="sticky top-0 z-50 hidden min-h-14 shrink-0 items-center gap-1 overflow-x-auto border-b border-sidebar-border bg-sidebar px-4 text-sidebar-foreground md:flex lg:px-6">
-    <Link to="/inicio" aria-label="Ir al inicio" className="mr-2 flex size-9 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-sidebar-accent/40"><img src={logo} alt="" className="size-6 object-contain" /></Link>
+    <Link to="/inicio" aria-label="Ir al inicio" className="mr-2 flex size-9 shrink-0 items-center justify-center rounded-full bg-white p-0.5"><img src={logo} alt="Logo de ABISSOL" className="size-8 rounded-full object-contain" /></Link>
     {activeSection && <Link to="/inicio" className="mr-2 inline-flex h-10 shrink-0 items-center gap-2 rounded-lg bg-sidebar-accent/55 px-3 text-sm font-medium text-sidebar-accent-foreground"><SquareArrowLeft className="size-4" /><span>{activeSection.nombre}</span></Link>}
     {navigationItems.map((item, index) => <MenuDropdown key={item.id} item={item} colorIndex={index} />)}
   </nav>;

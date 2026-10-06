@@ -84,7 +84,13 @@ class PlatformTests(unittest.TestCase):
     def test_platform_pages_api(self):
         _, headers = self.login()
         for path in ("/ui-settings", "/usuarios", "/roles", "/menus", "/calendario/eventos",
-                     "/notificaciones", "/documentacion", "/documentos", "/panel-principal/metricas"):
+                     "/notificaciones", "/documentacion", "/documentos", "/panel-principal/metricas",
+                     "/admin/menus", "/access-grants", "/smtp-settings", "/whatsapp-settings",
+                     "/message-templates", "/avi-settings", "/avi/contexto", "/avi/hilo",
+                     "/auditoria", "/auditoria/estadisticas", "/devops/logs", "/devops/progress",
+                     "/calendario/etiquetas", "/calendario/personas", "/calendario/notificaciones",
+                     "/notificaciones/reglas", "/notificaciones/tipos", "/documentos/carpetas",
+                     "/documentos/almacenamiento", "/documentos/papelera/configuracion"):
             with self.subTest(path=path):
                 response = self.client.get(API + path, headers=headers)
                 self.assertEqual(response.status_code, 200, response.text)

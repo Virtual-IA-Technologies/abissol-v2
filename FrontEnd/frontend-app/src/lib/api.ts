@@ -2,7 +2,8 @@ import axios, { type InternalAxiosRequestConfig } from "axios";
 
 import type { WolverineSession } from "@/features/wolverine/types";
 
-export const API_ROOT = `${import.meta.env.VITE_API_URL || "http://localhost:8015"}/abissol/api/v1`;
+const apiOrigin = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? window.location.origin : "http://localhost:8015");
+export const API_ROOT = `${apiOrigin.replace(/\/$/, "")}/abissol/api/v1`;
 
 type RetryableRequest = InternalAxiosRequestConfig & { _wolverineRetry?: boolean };
 type UploadRequest = RetryableRequest & { _uploadId?: string };

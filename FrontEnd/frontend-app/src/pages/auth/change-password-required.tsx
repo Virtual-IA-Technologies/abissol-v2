@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BrainCircuit, Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Lock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ export default function ChangePasswordRequired() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   const { settings } = usePlatformSettings();
-  const logo = settings.logo_dark_url || settings.logo_light_url || "/favicon.svg";
+  const logo = settings.logo_light_url || "/abissol-logo.png";
   const [nuevaClave, setNuevaClave] = useState("");
   const [confirmarClave, setConfirmarClave] = useState("");
   const [showNuevaClave, setShowNuevaClave] = useState(false);
@@ -58,38 +58,35 @@ export default function ChangePasswordRequired() {
 
   const passwordField = (id: string, label: string, value: string, setter: (value: string) => void, visible: boolean, toggle: () => void) => (
     <div className="space-y-2">
-      <Label htmlFor={id}>{label}</Label>
+      <Label htmlFor={id} className="text-xs font-medium text-slate-700">{label}</Label>
       <div className="relative">
         <Lock className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
-        <Input id={id} type={visible ? "text" : "password"} required autoComplete="new-password" value={value} onChange={(event) => setter(event.target.value)} placeholder="••••••••" className="h-12 rounded-xl border-slate-200 bg-slate-50 px-10 focus-visible:ring-blue-500" />
-        <button type="button" aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"} onClick={toggle} className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-blue-600">{visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
+        <Input id={id} type={visible ? "text" : "password"} required autoComplete="new-password" aria-describedby="password-requirements" value={value} onChange={(event) => setter(event.target.value)} placeholder="••••••••" className="h-12 rounded-xl border-slate-200 bg-white px-10 text-slate-900 focus-visible:border-[#769e48] focus-visible:ring-[#769e48]/25" />
+        <button type="button" aria-label={visible ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={visible} onClick={toggle} className="absolute right-1 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-500 hover:text-[#42652f] focus-visible:outline-2 focus-visible:outline-[#769e48]">{visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}</button>
       </div>
     </div>
   );
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-[#06101f] text-white">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(37,99,235,.28),transparent_34%),radial-gradient(circle_at_85%_80%,rgba(6,182,212,.18),transparent_30%)]" />
-      <div className="relative mx-auto grid min-h-screen max-w-6xl items-center gap-14 px-5 py-10 lg:grid-cols-2 lg:px-12">
-        <section className="hidden lg:block">
-          <div className="mb-9 flex items-center gap-4"><div className="rounded-2xl bg-white px-4 py-2"><img src={logo} alt={settings.app_title} className="h-20 w-auto object-contain" /></div><div><p className="text-xl font-semibold">{settings.app_title}</p><p className="text-xs uppercase tracking-[.22em] text-blue-200/60">{settings.organization_name}</p></div></div>
-          <h1 className="text-5xl font-semibold leading-tight tracking-[-.04em]">Tu seguridad activa la nueva experiencia.</h1>
-          <p className="mt-5 max-w-lg text-lg leading-8 text-slate-300">Actualiza tu clave temporal para proteger tu identidad y acceder al nuevo núcleo inteligente de ABISSOL.</p>
-          <div className="mt-8 flex gap-3"><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><ShieldCheck className="size-5 text-cyan-300" /></div><div className="rounded-2xl border border-white/10 bg-white/5 p-4"><BrainCircuit className="size-5 text-blue-300" /></div></div>
-        </section>
-        <section className="rounded-[28px] border border-white/60 bg-white p-7 text-slate-900 shadow-[0_32px_100px_rgba(0,0,0,.38)] sm:p-10">
-          <div className="mb-7 flex items-center gap-3 lg:hidden"><img src={settings.logo_light_url || "/favicon.svg"} alt={settings.app_title} className="size-12 object-contain" /><div><p className="font-semibold">{settings.app_title}</p><p className="text-xs text-slate-500">{settings.organization_name}</p></div></div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[.18em] text-blue-600">Primer acceso</p>
-          <h2 className="text-3xl font-semibold tracking-tight">Crea una nueva contraseña</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-500">Hola {user?.nombre || "usuario"}, reemplaza tu clave temporal antes de continuar.</p>
+    <main className="relative flex min-h-svh items-center justify-center overflow-hidden bg-[#101c19] px-4 py-10 text-slate-900 sm:py-12">
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_12%_10%,rgba(116,154,64,.2),transparent_45%),radial-gradient(ellipse_at_90%_90%,rgba(64,119,75,.22),transparent_40%)]" />
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 opacity-[.035] [background-image:linear-gradient(#b6c9b3_1px,transparent_1px),linear-gradient(90deg,#b6c9b3_1px,transparent_1px)] [background-size:48px_48px]" />
+        <section aria-labelledby="change-password-title" className="relative w-full max-w-[440px] rounded-[28px] border border-white/70 bg-white px-6 py-8 shadow-[0_28px_90px_rgba(0,0,0,.3)] sm:px-10 sm:py-10">
+          <header className="text-center">
+            <img src={logo} alt="ABISSOL — Asociación de Bienestar, Inclusión, Salud y Solidaridad" className="mx-auto mb-6 h-auto w-[180px] max-w-full object-contain" />
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[#eff5e9] px-3 py-1 text-xs font-medium text-[#42652f]"><ShieldCheck className="size-3.5" aria-hidden="true" />Primer acceso</span>
+            <h1 id="change-password-title" className="mt-4 text-2xl font-semibold tracking-tight text-[#172d3e]">Crea una nueva contraseña</h1>
+            <p className="mt-2 text-sm leading-6 text-slate-500">Hola {user?.nombre || "usuario"}, reemplaza tu clave temporal antes de continuar.</p>
+          </header>
           <form onSubmit={handleChangePassword} className="mt-8 space-y-5">
             {passwordField("nueva_clave", "Nueva contraseña", nuevaClave, setNuevaClave, showNuevaClave, () => setShowNuevaClave(!showNuevaClave))}
             {passwordField("confirmar_clave", "Confirmar contraseña", confirmarClave, setConfirmarClave, showConfirmarClave, () => setShowConfirmarClave(!showConfirmarClave))}
-            <Button type="submit" disabled={loading} className="h-12 w-full rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20 hover:bg-blue-700">{loading ? "Actualizando..." : "Guardar y continuar"}</Button>
-            <Button type="button" variant="ghost" onClick={handleLogout} className="h-11 w-full text-slate-500 hover:text-slate-900">Cerrar sesión</Button>
+            <p id="password-requirements" className="text-xs leading-5 text-slate-500">Usa al menos 10 caracteres, una mayúscula, una minúscula y un número.</p>
+            <Button type="submit" disabled={loading} className="h-12 w-full rounded-xl border-0 bg-gradient-to-r from-[#507b30] to-[#397747] text-white shadow-lg shadow-[#527c35]/15 hover:from-[#426729] hover:to-[#2f633b] focus-visible:ring-[#769e48]/40">{loading ? "Actualizando..." : "Guardar y continuar"}</Button>
+            <Button type="button" variant="ghost" onClick={handleLogout} className="h-11 w-full text-[#527c35] hover:bg-[#eff5e9] hover:text-[#3d5e28]">Cerrar sesión</Button>
           </form>
+          <footer className="mt-7 border-t border-slate-100 pt-5 text-center text-xs text-slate-400">ABISSOL · Bienestar, inclusión, salud y solidaridad</footer>
         </section>
-      </div>
     </main>
   );
 }

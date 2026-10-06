@@ -91,10 +91,17 @@ Los conectores SMTP, WhatsApp, Drive, ONLYOFFICE, consultas de identidad y prove
 externos requieren configuración propia; no se han activado ni probado con cuentas reales.
 El catálogo UBIGEO tiene estructura vacía. El asistente conserva su estructura y
 configuración, desactivado inicialmente; sus herramientas específicas de negocio fueron retiradas.
-DevOps conserva herramientas de repositorio, pero no incluye destino, workflows ni
-autorización de despliegue. Publicar devuelve 409 mientras no se configure expresamente.
+DevOps trabaja exclusivamente en `main`: descargar, subir a GitHub y publicar.
+Piloto: `https://v2.abissol.org`, servidor `alp`, base independiente `abissol_v2`.
+La configuración privada local está en `deployment/.env` (plantilla `.env.example`).
+Después de subir main: `BackEnd/.venv/Scripts/python.exe deployment/publish.py`.
+El publicador exige main limpio y sincronizado, compila, transfiere el commit,
+respalda la base existente, migra y comprueba HTTPS. No copia entornos ni datos locales.
+Backend remoto: servicio `abissol-v2`, puerto interno 8015; releases bajo
+`/home/abissol/apps/abissol-v2`, almacenamiento compartido fuera de la raíz pública.
 
 La migración `0001_platform` es una línea base nueva para bases vacías. **No se aplica
 sobre una base SIACAT ni sobre el ABISSOL anterior.** El repositorio anterior no fue modificado.
 
 Estado y verificaciones: [documentación del proyecto](docs/ia-agentica/README.md).
+Repositorio vigente desde el 05/10/2026: `https://github.com/Virtual-IA-Technologies/abissol-v2.git`. Publicación directa en main autorizada el 05/10/2026.

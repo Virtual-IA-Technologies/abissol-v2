@@ -1,5 +1,30 @@
 # Estado actual
 
+## Marca en navegación · 05/10/2026 19:08 America/Lima
+
+La cabecera del sidebar usa el símbolo oficial, nombre ABISSOL con acento verde
+y lema «Inclusión, salud y solidaridad». Navegación por iconos y superior también
+usan el símbolo oficial. Se conservan logos y textos personalizados configurados.
+Validada la cabecera en Edge con sesión simulada; trabajo local.
+
+## Cambio obligatorio de clave · 05/10/2026 19:05 America/Lima
+
+Pantalla de primer acceso alineada con el login: tarjeta centrada, logo oficial,
+fondo oscuro verde, acciones y focos verdes. Se conservan validaciones, cambio
+de contraseña, cierre de sesión y redirección. TypeScript correcto; Edge con
+sesión simulada verificó escritorio/móvil, logo y controles, sin tocar cuentas.
+
+## Login con identidad ABISSOL · 05/10/2026 18:59 America/Lima
+
+Tarjeta centrada con fondo oscuro, acentos verdes, logo y favicon originales
+descargados de https://abissol.org/images/abissol-logo.png y
+https://abissol.org/images/favicon.png. Archivos locales sin transformación.
+Se conserva el logo claro personalizado si existe en Configuración.
+El formulario mantiene contraseña, recuperación y sesión persistente; no agrega OTP.
+Verificado en Edge: escritorio/móvil, logo cargado, mostrar/ocultar contraseña,
+sin desbordamiento horizontal ni errores JavaScript; conexión API correcta.
+Solo cambios locales, sin commit, push ni despliegue.
+
 05/10/2026, America/Lima. Base local independiente preparada para revisión.
 
 FastAPI y React conservan plataforma, usuarios, Wolverine, auditoría, documentos,
@@ -20,3 +45,20 @@ Linux/macOS y Docker opcional; Docker no se ejecutó porque su daemon estaba apa
 Sin funcionalidad comercial ABISSOL, sin datos heredados y sin despliegue.
 Repositorio destino: virtualizate-pe/abissol-v2, inicialmente vacío. Entrega inicial
 preparada en main para clonación; no incluye historial Git ni secretos del origen.
+
+Publicación pendiente: commit local `c95b9e0`. La revisión automática rechazó el
+push por exigir autorización expresa para exportar código derivado de SIACAT.
+GitHub sigue sin recibir esta base; todavía no puede clonarse desde el remoto.
+La aclaración documental posterior al rechazo queda en el árbol local.
+## GitHub reconfigurado · 05/10/2026 18:56 America/Lima
+
+Repositorio vigente: `Virtual-IA-Technologies/abissol-v2`, solicitado por el usuario tras cambiar el nombre de cuenta. El remoto responde correctamente pero sigue sin ramas: la base inicial todavía no se exportó. Esta reconfiguración no equivale a publicar esa base.
+
+## Refresh y piloto — 05/10/2026
+
+- DevOps simplificado a main → GitHub → servidor: sin ramas personales ni scripts inexistentes, sin consultas periódicas de integración.
+- API de producción usa el mismo dominio; configuración local y remota separadas.
+- Pruebas ampliadas a consultas de todas las opciones de plataforma y restricciones de main. Build React correcto; migraciones locales sin diferencias.
+- Imports frontend sin destinos rotos. Componentes genéricos sin consumidores se conservan como biblioteca para próximos módulos; no son opciones de menú huérfanas.
+- Piloto autorizado: `v2.abissol.org`, servidor alp, base nueva `abissol_v2`, servicio independiente, releases y almacenamiento fuera de public_html.
+- Publicador en deployment: respaldo de base existente, comprobación de salud y main sincronizado. Secretos excluidos del repositorio.
