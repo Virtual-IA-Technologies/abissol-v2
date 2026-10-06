@@ -36,6 +36,9 @@ MENUS = [
     ("documentos", "Archivos", "/documentos/archivos", "menu", "modulo-documentos", "Files"),
 ]
 
+# Keep stable permission identities and old URLs; these are now workspace tabs.
+INTEGRATED_MENUS = {"medical-plans", "medical-dispatches", "smtp", "whatsapp"}
+
 def seed_platform(db: Session):
     roles = {}
     for name, priority, superuser, default in [
@@ -55,7 +58,7 @@ def seed_platform(db: Session):
         if menu is None:
             menu = Menu(slug=slug, nombre=name, ruta=route, tipo=kind, icono=icon,
                         parent_id=menus[parent].id if parent else None, orden=order,
-                        is_visible=True, is_active=True)
+                        is_visible=slug not in INTEGRATED_MENUS, is_active=True)
             db.add(menu)
             db.flush()
             if slug != "devops":

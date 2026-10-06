@@ -1,7 +1,8 @@
 import unittest
 import test_platform as platform
 from app.bootstrap import MENUS
-from app.models import Menu
+from app.models import AccessGrant, Menu, Usuario
+from app.services.access_control import access_by_slug, effective_menu_tree
 from app.schemas.wolverine import MenuWrite
 
 
@@ -9,6 +10,23 @@ class MenuRouteTests(unittest.TestCase):
     setUp = platform.PlatformTests.setUp
     cleanup = platform.PlatformTests.cleanup
     login = platform.PlatformTests.login
+
+    def test_integrated_tabs_keep_permissions_and_navigation(self):
+        with self.sessions() as db:
+            reader = db.query(Usuario).filter_by(username="reader").one()
+            for slug in ("medical-plans", "medical-dispatches", "smtp", "whatsapp"):
+                self.assertFalse(db.query(Menu).filter_by(slug=slug).one().is_visible)
+            menu = db.query(Menu).filter_by(slug="medical-plans").one()
+            db.add(AccessGrant(usuario_id=reader.id, menu_id=menu.id, access_level="lector"))
+            db.commit()
+            def slugs(nodes):
+                return [slug for node in nodes for slug in [node["slug"], *slugs(node["children"])]]
+            self.assertIn("medical-emissions", slugs(effective_menu_tree(db, reader)))
+            self.assertNotIn("medical-plans", slugs(effective_menu_tree(db, reader)))
+            self.assertEqual(access_by_slug(db, reader).get("medical-emissions", "none"), "none")
+        _, headers = self.login("reader")
+        self.assertEqual(self.client.get(platform.API + "/medical/plans", headers=headers).status_code, 200)
+        self.assertEqual(self.client.get(platform.API + "/medical/emissions", headers=headers).status_code, 403)
 
     def test_rename_and_move_preserve_implemented_routes(self):
         _, headers = self.login()

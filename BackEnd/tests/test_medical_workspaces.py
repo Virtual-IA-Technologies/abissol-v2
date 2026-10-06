@@ -4,6 +4,7 @@ from io import BytesIO
 from zipfile import ZipFile
 from unittest.mock import patch
 from xml.etree import ElementTree
+from sqlalchemy import event
 import test_medical as medical
 from app.models import AccessGrant, Menu, Usuario
 from app.models.medical import MedicalSource, MedicalIssuance, MedicalDispatch, MedicalLiquidation, MedicalBusinessSetting
@@ -70,6 +71,42 @@ class WorkspaceTests(unittest.TestCase):
             db.add(SmtpSetting(host="smtp.example.com",from_email="test@example.com",is_active=True))
             db.add(MedicalBusinessSetting(id=1,values={"metafin_email":"meta@example.com"}))
             db.commit()
+
+    def test_meta_summary_history_and_dispatch_codes(self):
+        emission = self.setup_emission()
+        with self.sessions() as db:
+            for state in ("sent", "failed", "uncertain"):
+                db.add(MedicalDispatch(issuance_id=emission["id"], kind="meta_daily_report", channel="email", recipient="meta@example.com", status=state, created_by=self.admin_id))
+            db.commit()
+        for state, total in (("all",1),("pending",0),("sent",1),("failed",1),("uncertain",1)):
+            response = self.client.get(API + "/meta-dispatches", params={"status":state}, headers=self.headers)
+            self.assertEqual(response.status_code,200,response.text)
+            result=response.json()
+            self.assertEqual(result["total"],total)
+            self.assertEqual(result["summary"],{"pending":0,"sent":1,"failed":1})
+            if total:
+                self.assertEqual(result["items"][0]["dispatch_status"],"uncertain")
+        result=self.client.get(API + "/dispatches",headers=self.headers)
+        self.assertEqual(result.status_code,200,result.text)
+        self.assertEqual(result.json()["items"][0]["issuance_code"],emission["code"])
+
+    def test_preview_query_count_does_not_grow_with_emissions(self):
+        emission = self.setup_emission()
+        statements=[]
+        def capture(conn,cursor,statement,parameters,context,many):
+            if statement.lstrip().upper().startswith("SELECT"):
+                statements.append(statement)
+        event.listen(self.engine,"before_cursor_execute",capture)
+        try:
+            self.post("/liquidations/preview",self.period(emission))
+            baseline=len(statements)
+            for number in ("87654321","12348765","56781234"):
+                self.issuance(document_number=number)
+            statements.clear()
+            self.assertEqual(self.post("/liquidations/preview",self.period(emission))["total"],4)
+            self.assertEqual(len(statements),baseline)
+        finally:
+            event.remove(self.engine,"before_cursor_execute",capture)
 
     def test_meta_export_send_deduplication_and_monthly_files(self):
         emission=self.setup_emission(customer="=SUM(A1:A2)")

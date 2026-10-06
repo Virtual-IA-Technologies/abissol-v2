@@ -17,10 +17,10 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, Response, HTMLResponse, JSONResponse
 from sqlalchemy import false, func, or_, case
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..database import get_db
-from ..models import Usuario
+from ..models import Usuario, UsuarioRol
 from ..models.legacy import LegacyRecord, LegacyFile, MedicalBillingConfiguration
 from ..utils.secrets import decrypt_secret
 from ..models.medical import (MedicalPlan as Plan, MedicalSource as Source, MedicalProfile as Profile,
@@ -119,27 +119,33 @@ def lookups(section: str, db: Session = Depends(get_db), identity=Depends(get_cu
         raise HTTPException(404)
     user = identity.effective_user
     ensure_option_access(db, user, "medical-" + section)
-    people = profiles_scope(db, user).all()
-    source_ids = {p.source_id for p in people}
-    sources = db.query(Source)
-    if not admin(user):
-        sources = sources.filter(Source.id.in_(source_ids))
-    users = db.query(Usuario).filter(Usuario.deleted_at.is_(None))
-    if section != "network" or not admin(user):
-        users = users.filter(Usuario.id.in_([p.user_id for p in people]))
-    return {"plans": [dump(p) for p in db.query(Plan).order_by(Plan.name)],
-            "sources": [dump(s) for s in sources.order_by(Source.name)],
-            "profiles": [dump(p) for p in people],
+    needs_people = section in {"network", "emissions", "liquidations"}
+    people = profiles_scope(db, user).all() if needs_people else []
+    sources = []
+    if section == "network":
+        query = db.query(Source)
+        if not admin(user):
+            query = query.filter(Source.id.in_({p.source_id for p in people}))
+        sources = query.order_by(Source.name).all()
+    users = []
+    if needs_people:
+        query = db.query(Usuario).options(selectinload(Usuario.roles), selectinload(Usuario.role_assignments).selectinload(UsuarioRol.rol)).filter(Usuario.deleted_at.is_(None))
+        if section != "network" or not admin(user):
+            query = query.filter(Usuario.id.in_({p.user_id for p in people if p.user_id}))
+        users = query.all()
+    return {"plans": [dump(p) for p in db.query(Plan).order_by(Plan.name)] if section == "emissions" else [],
+            "sources": [dump(source) for source in sources], "profiles": [dump(p) for p in people],
             "users": [{"id": u.id, "name": f"{u.nombre} {u.apellido or ''}".strip(), "is_active": u.is_active, "roles": [r.nombre for r in u.active_roles()]} for u in users],
-            "emissions": [{"id": e.id, "code": e.code, "customer": e.customer} for e in scope(db, user).filter(Issuance.status == "issued").order_by(Issuance.id.desc()).limit(200)] if section in {"billing", "dispatches"} else [],
-            "global_access": admin(user), "fiscal_enabled": bool(fiscal.configuration(db)[1].get('enabled_in_v2')),
-            "can_configure_communications": fiscal.programmer(user),
-            "can_configure_billing": fiscal.programmer(user)}
+            "emissions": [], "global_access": admin(user),
+            "fiscal_enabled": bool(fiscal.configuration(db)[1].get('enabled_in_v2')) if section == "billing" else False,
+            "can_configure_communications": fiscal.programmer(user), "can_configure_billing": fiscal.programmer(user)}
+
 
 
 @router.get("/plans")
 def plans(db: Session = Depends(get_db), user=Depends(require_access("medical-plans"))):
-    return {"items": [dump(p) for p in db.query(Plan).order_by(Plan.id)], "total": db.query(Plan).count()}
+    rows = db.query(Plan).order_by(Plan.id).all()
+    return {"items": [dump(p) for p in rows], "total": len(rows)}
 
 
 @router.get("/issuance-options")
@@ -444,13 +450,18 @@ def liquidation_candidates(db, user, payload, lock=False):
     return rows
 
 
-def liquidation_amounts(db, emission, kind):
+def afocat_emissions(db, emissions, kind):
+    if kind != "seller":
+        return set()
+    ids = {e.id for e in emissions}
+    return {ident for ident, in db.query(Issuance.id).join(Profile, Profile.id == Issuance.responsible_id).join(Source, Source.id == Issuance.source_id).filter(Issuance.id.in_(ids), Profile.kind == "responsible", Source.kind == "afocat")}
+
+
+def liquidation_amounts(emission, kind, afocat_ids):
     commission = emission.seller_commission if kind == "seller" else emission.meta_commission if kind == "meta" else emission.platform_fee
     deposit = commission if kind != "seller" else Decimal(0)
     if kind == "seller" and emission.payment_status == "collected_by_seller":
-        source = db.get(Source, emission.source_id)
-        responsible = db.get(Profile, emission.responsible_id)
-        afocat_managed = source.kind == "afocat" and responsible.kind == "responsible"
+        afocat_managed = emission.id in afocat_ids
         deposit = emission.provider_cost if afocat_managed else (emission.paid_amount or emission.price)
     return commission, deposit
 
@@ -474,8 +485,9 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
 def preview_liquidation(payload: LiquidationInput, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
     rows = liquidation_candidates(db, user, payload)
     items = []
+    afocat_ids = afocat_emissions(db, rows, payload.kind)
     for e in rows:
-        commission, deposit = liquidation_amounts(db, e, payload.kind)
+        commission, deposit = liquidation_amounts(e, payload.kind, afocat_ids)
         items.append({**dump(e), "commission": str(commission), "deposit": str(deposit)})
     return {"items": items, "total": len(items), "sale_total": str(sum((e.price for e in rows), Decimal(0))),
             "deposit_total": str(sum((Decimal(i["deposit"]) for i in items), Decimal(0)))}
@@ -491,8 +503,9 @@ def create_liquidation(payload: LiquidationInput, request: Request, db: Session 
     db.flush()
     prefix = {"seller": "LQ", "meta": "LM", "platform": "LP"}[payload.kind]
     row.code = f"{prefix}-{payload.starts_on:%Y%m%d}-{payload.ends_on:%Y%m%d}-{row.id:06d}"
+    afocat_ids = afocat_emissions(db, eligible, payload.kind)
     for emission in eligible:
-        commission, deposit = liquidation_amounts(db, emission, payload.kind)
+        commission, deposit = liquidation_amounts(emission, payload.kind, afocat_ids)
         db.add(Item(liquidation_id=row.id, issuance_id=emission.id, active_key=f"{payload.kind}:{emission.id}", sale=emission.price, commission=commission, deposit=deposit))
         row.sales_total += emission.price
         row.commission_total += commission
@@ -724,7 +737,9 @@ def dispatches(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200
     query = db.query(Dispatch)
     if not admin(user):
         query = query.filter(or_(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery()), Dispatch.liquidation_id.in_(liquidation_scope(db, user).with_entities(Liquidation.id).scalar_subquery())))
-    return page(query, offset, limit)
+    total = query.count()
+    rows = query.add_columns(Issuance.code, Liquidation.code).outerjoin(Issuance, Issuance.id == Dispatch.issuance_id).outerjoin(Liquidation, Liquidation.id == Dispatch.liquidation_id).order_by(Dispatch.id.desc()).offset(offset).limit(limit).all()
+    return {"items": [{**dump(row), "issuance_code": code, "liquidation_code": liquidation_code} for row, code, liquidation_code in rows], "total": total}
 
 
 def deliver(db, request, user, row, emission):

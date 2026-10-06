@@ -1,5 +1,5 @@
 """Negocio ABISSOL; independiente de las tablas del sistema anterior."""
-from sqlalchemy import JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, Column, Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, Index
 from ..database import Base
 from ..utils.time import utc_now
 
@@ -156,6 +156,7 @@ class MedicalBusinessSetting(Base):
 
 class MedicalDispatch(Base):
     __tablename__ = "medical_dispatches"
+    __table_args__ = (Index("ix_medical_dispatch_meta_state", "issuance_id", "kind", "status"),)
     id = Column(Integer, primary_key=True)
     issuance_id = Column(Integer, ForeignKey("medical_issuances.id"), nullable=True, index=True)
     liquidation_id = Column(Integer, ForeignKey("medical_liquidations.id"))

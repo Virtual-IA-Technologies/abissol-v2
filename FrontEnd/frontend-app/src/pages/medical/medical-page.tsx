@@ -1,12 +1,10 @@
 import { SearchableSelect } from '@/components/searchable-select';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined, Mail, MessageCircle, Settings2, History } from "lucide-react";
+import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined, Settings2 } from "lucide-react";
 import axios from "axios";
 import api from "@/lib/api";
 import { BillingHistory } from "./billing-history";
 import { UnderlineTabs } from "@/components/underline-tabs";
-import SmtpPanel from "@/pages/settings-panels/smtp-panel";
-import WhatsappPanel from "@/pages/settings-panels/whatsapp-panel";
 import { BillingConfiguration } from "./billing-configuration";
 import { BusinessWorkspace, type SectionProps } from "./business-workspace";
 import { LiquidationBuilder } from "./business-workspace-panels";
@@ -48,7 +46,8 @@ function errorText(error: unknown) {
 }
 
 export default function MedicalPage({ section }: { section: string }) {
-  return section === "emissions" || section === "liquidations" ? <BusinessWorkspace key={section} section={section} renderSection={props => <MedicalSection key={`${props.section}-${props.liquidationKind || 'history'}`} {...props} />} /> : <MedicalSection section={section} />;
+  const { user } = useAuth();
+  return section === "emissions" || section === "liquidations" ? <BusinessWorkspace key={`${section}-${user?.id}`} section={section} renderSection={props => <MedicalSection key={`${props.section}-${props.liquidationKind || 'history'}`} {...props} />} /> : <MedicalSection key={`${section}-${user?.id}`} section={section} />;
 }
 
 function MedicalSection({ section, embedded = false, liquidationKind, history = false }: SectionProps) {
@@ -66,25 +65,29 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
   const [page, setPage] = useState(0);
   const [modal, setModal] = useState<Modal | null>(null);
   const [detail, setDetail] = useState<LiquidationDetail | null>(null);
-  const [communicationsTab, setCommunicationsTab] = useState("history");
   const [billingTab, setBillingTab] = useState("documents");
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const requestVersion = useRef(0);
+  const referencesCache = useRef<Lookup | null>(null);
+  const serverQuery = section === "plans" || section === "network" ? "" : query;
   const editor = !history && can(`medical-${section}`, "editor");
   const manager = !history && can(`medical-${section}`, "gestor");
   const Icon = icons[section as keyof typeof icons] || HeartPulse;
-  const load = useCallback(async () => {
+  const load = useCallback(async (refreshReferences = true) => {
     const version = ++requestVersion.current;
     setLoading(true); setError("");
     try {
-      const params = { offset: page * 25, limit: 25, kind: liquidationKind, state: section === "emissions" ? emissionState : undefined, search: query, starts_on: start || undefined, ends_on: end || undefined };
-      const [list, references] = await Promise.all([api.get<Listing>(`/medical/${section}`, { params }), api.get<Lookup>("/medical/lookups", { params: { section } })]);
-      if (version === requestVersion.current) { setData(list.data); setLookup(references.data); }
+      const params = { offset: page * 25, limit: 25, kind: liquidationKind, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined };
+      if (refreshReferences) referencesCache.current = null;
+      const referencesPromise = referencesCache.current ? Promise.resolve(referencesCache.current) : api.get<Lookup>("/medical/lookups", { params: { section } }).then(r => r.data);
+      const [list, references] = await Promise.all([section === "network" ? referencesPromise.then(refs => ({ data: { items: refs.profiles, total: refs.profiles.length } as Listing })) : api.get<Listing>(`/medical/${section}`, { params }), referencesPromise]);
+      if (version === requestVersion.current) { referencesCache.current = references; setData(list.data); setLookup(references); }
+
     } catch (e) { if (version === requestVersion.current) setError(errorText(e)); }
     finally { if (version === requestVersion.current) setLoading(false); }
-  }, [section, page, query, start, end, liquidationKind, emissionState]);
-  useEffect(() => { void load(); }, [load]);
+    }, [section, page, serverQuery, start, end, liquidationKind, emissionState]);
+  useEffect(() => { void load(false); }, [load]);
   const userName = (id: Value) => { const account = lookup.users.find(u => u.id === Number(id)); return account ? `${account.name}${account.is_active ? "" : " · Cuenta desactivada"}` : `Usuario ${id}`; };
   const profileName = (id: Value) => { if (!id) return "Consolidado general"; const p = lookup.profiles.find(p => p.id === Number(id)); return p ? String(p.display_name || userName(p.user_id)) : `Perfil ${id}`; };
   const sourceOptions = lookup.sources.filter(p => p.active).map(p => ({ value: String(p.id), label: String(p.name) }));
@@ -125,7 +128,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     if (section === "emissions") return setModal({ title: "Nueva emisión", path: "/emissions", fields: [] });
     if (section === "liquidations") return setModal({ title: "Preparar liquidación", path: "/liquidations", fields: [] });
     if (section === "billing") return invoiceForm();
-    if (section === "dispatches") setModal({ title: "Enviar constancia", path: "/dispatches", initial: { channel: "email" }, description: "Al confirmar se contactará al destinatario registrado en la emisión. El programador configura los canales en las pestañas Correo y WhatsApp de Comunicaciones.", fields: [emissionField, { name: "channel", label: "Canal", options: opts("email", "whatsapp") }] });
+    if (section === "dispatches") setModal({ title: "Enviar constancia", path: "/dispatches", initial: { channel: "email" }, description: "Al confirmar se contactará al destinatario registrado en la emisión. El programador configura los canales en Emisiones / Configuración.", fields: [emissionField, { name: "channel", label: "Canal", options: opts("email", "whatsapp") }] });
   }
   function invoiceForm(row?: Row) {
     setModal({ title: row ? "Corregir borrador" : "Preparar comprobante", path: `/billing${row ? `/${row.id}` : ""}`, method: row ? "put" : "post", initial: row || { document_type: "boleta" }, description: "Este registro es un borrador interno. No asigna serie fiscal ni se envía a SUNAT.", fields: [emissionField, { name: "document_type", label: "Comprobante", options: opts("boleta", "factura") }, { name: "customer", label: "Titular / razón social" }, { name: "document_number", label: "Documento del cliente (RUC para factura)" }] });
@@ -143,7 +146,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     plans: [["Plan", r => `${r.code} · ${r.name}`], ["Precio", r => money(r.price)], ["Proveedor", r => money(r.provider_cost)], ["Vendedor", r => money(r.seller_commission)], ["Vigencia", r => `${r.validity_days} días`], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     network: [["Participante", r => String(r.display_name || userName(r.user_id))], ["Acceso al portal", r => r.user_id ? userName(r.user_id) : "Sin cuenta ABISSOL"], ["Roles de acceso", r => r.user_id ? (lookup.users.find(u => u.id === Number(r.user_id))?.roles || []).join(", ") || "Sin rol activo" : "Sin acceso al portal"], ["ID externo", r => String(r.external_user_id || "—")], ["Función", r => labels[String(r.kind)]], ["Origen", r => String(lookup.sources.find(s => s.id === r.source_id)?.name || r.source_id)], ["Responsable", r => r.manager_id ? profileName(r.manager_id) : "—"], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     emissions: [["Certificado", r => String(r.code)], ["Titular", r => `${r.customer} · ${r.document_number}`], ["Plan", r => String(r.plan_name)], ["Vigencia", r => `${r.starts_on} → ${r.ends_on}`], ["Importe", r => money(r.price)], ["Estado", r => `${labels[String(r.status)]} · ${labels[String(r.payment_status)]}`]],
-    dispatches: [["Emisión", r => String(lookup.emissions.find(e => e.id === r.issuance_id)?.code || (r.liquidation_id ? `Liquidación #${r.liquidation_id}` : "Envío general"))], ["Canal", r => labels[String(r.channel)]], ["Destinatario", r => String(r.recipient)], ["Estado", r => labels[String(r.status)] || String(r.status)], ["Intentos", r => String(r.attempts)], ["Detalle", r => String(r.error || "—")]],
+    dispatches: [["Emisión", r => String(r.issuance_code || r.liquidation_code || (r.liquidation_id ? `Liquidación #${r.liquidation_id}` : "Envío general"))], ["Canal", r => labels[String(r.channel)]], ["Destinatario", r => String(r.recipient)], ["Estado", r => labels[String(r.status)] || String(r.status)], ["Intentos", r => String(r.attempts)], ["Detalle", r => String(r.error || "—")]],
     liquidations: [["Número", r => String(r.code || `LIQ-${r.id}`)], ["Tipo", r => labels[String(r.kind)]], ["Responsable", r => profileName(r.responsible_id)], ["Período", r => `${r.starts_on} → ${r.ends_on}`], ["Ventas", r => money(r.sales_total)], ["Comisión / proveedor", r => money(r.commission_total)], ["Depósito", r => money(r.deposit_required)], ["Estado", r => labels[String(r.status)] || String(r.status)]],
     billing: [["Comprobante", r => String(r.full_number || `BOR-${r.id}`)], ["Tipo", r => labels[String(r.document_type)] || String(r.document_type)], ["Cliente", r => String(r.customer)], ["Documento", r => String(r.document_number)], ["Total", r => money(r.total)], ["Estado fiscal", r => `${r.fiscal_environment === "beta" ? "PRUEBA BETA · " : ""}${labels[String(r.sunat_status)] || String(r.sunat_status)}`], ["Estado", r => r.deleted_at ? "Archivado" : labels[String(r.status)] || String(r.status)]],
     reports: [["Plan", r => String(r.plan)], ["Emisiones", r => String(r.count)], ["Ventas", r => money(r.sales)]],
@@ -158,19 +161,13 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
   const visible = section === "plans" || section === "network" ? data.items.filter(r => (JSON.stringify(r) + (section === "network" ? userName(r.user_id) : "")).toLowerCase().includes(query.toLowerCase())) : data.items;
   return <section className={embedded ? "min-w-0 space-y-6" : "space-y-6 p-4 md:p-6"}>
     <header className="flex flex-wrap items-start justify-between gap-4"><div className="flex gap-3"><span className="rounded-xl bg-emerald-500/10 p-3 text-emerald-600"><Icon className="size-6" /></span><div><p className="text-xs font-medium uppercase tracking-widest text-emerald-600">Negocio ABISSOL</p><h1 className="text-2xl font-semibold">{section === "liquidations" ? (history ? "Historial de liquidaciones" : liquidationKind === "meta" ? "Liquidaciones mensuales META" : liquidationKind === "platform" ? "Liquidación de plataforma" : "Liquidaciones de vendedores") : titles[section]}</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">{descriptions[section]}</p></div></div>
-      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="size-4" /> Actualizar</Button>{editor && (section !== "dispatches" || communicationsTab === "history" || !lookup.can_configure_communications) && section !== "reports" && section !== "billing" && (section !== "plans" || manager) && (section !== "network" || (manager && lookup.global_access)) && <Button className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={create}><Plus className="size-4" />{section === "network" ? "Nuevo participante" : section === "dispatches" ? "Enviar constancia" : "Nuevo registro"}</Button>}</div>
+      <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void load()} disabled={loading}><RefreshCw className="size-4" /> Actualizar</Button>{editor && section !== "reports" && section !== "billing" && (section !== "plans" || manager) && (section !== "network" || (manager && lookup.global_access)) && <Button className="bg-emerald-700 text-white hover:bg-emerald-800" onClick={create}><Plus className="size-4" />{section === "network" ? "Nuevo participante" : section === "dispatches" ? "Enviar constancia" : "Nuevo registro"}</Button>}</div>
     </header>
-    <UnderlineTabs label={titles[section]} value={section === "billing" ? (lookup.can_configure_billing ? billingTab : "documents") : (lookup.can_configure_communications ? communicationsTab : "history")} onChange={section === "billing" ? setBillingTab : setCommunicationsTab} tabs={section === "billing" ? [
+    <UnderlineTabs label={titles[section]} value={lookup.can_configure_billing ? billingTab : "documents"} onChange={setBillingTab} tabs={section === "billing" ? [
       { value: "documents", label: "Comprobantes", icon: <Receipt className="size-4" /> },
       ...(lookup.can_configure_billing ? [{ value: "configuration", label: "Configuración · Programador", icon: <Settings2 className="size-4" /> }] : []),
-    ] : section === "dispatches" && !embedded ? [
-      { value: "history", label: "Historial de envíos", icon: <History className="size-4" /> },
-      ...(lookup.can_configure_communications ? [
-        { value: "email", label: "Correo · Configuración", icon: <Mail className="size-4" /> },
-        { value: "whatsapp", label: "WhatsApp · Configuración", icon: <MessageCircle className="size-4" /> },
-      ] : []),
     ] : []}>
-    {section === 'billing' && billingTab === 'configuration' && lookup.can_configure_billing ? <BillingConfiguration updated={load} /> : section === "dispatches" && lookup.can_configure_communications && communicationsTab === "email" ? <SmtpPanel /> : section === "dispatches" && lookup.can_configure_communications && communicationsTab === "whatsapp" ? <WhatsappPanel showOtp={false} /> : <>
+    {section === 'billing' && billingTab === 'configuration' && lookup.can_configure_billing ? <BillingConfiguration updated={load} /> : <>
     {section === 'billing' && <div className="rounded-xl border bg-emerald-500/5 p-4 text-sm">{lookup.fiscal_enabled ? 'La boleta se genera y envía automáticamente al registrar una emisión. El cobro se confirma por separado. Consulta aquí su PDF, XML y CDR.' : 'La emisión automática espera la activación de la configuración fiscal por el programador.'}</div>}
     {section === "emissions" && data.summary && <section className="space-y-3"><div><h2 className="font-semibold">Resumen de afiliaciones</h2><p className="text-sm text-muted-foreground">Indicadores del período y búsqueda. Selecciona una tarjeta para filtrar.</p></div><div className="grid grid-cols-2 gap-3 lg:grid-cols-5">{[["all","Todas"],["active","Vigentes"],["upcoming","Por iniciar"],["expired","Vencidas"],["cancelled","Anuladas"]].map(([state,label])=><button type="button" key={state} aria-pressed={emissionState===state} onClick={()=>{setEmissionState(state);setPage(0);}} className={`rounded-xl border p-4 text-left ${emissionState===state ? "border-emerald-500 bg-emerald-500/5" : "bg-card"}`}><span className="text-sm text-muted-foreground">{label}</span><strong className="mt-1 block text-2xl">{data.summary?.[state]||0}</strong></button>)}</div></section>}
     {error && <div role="alert" className="rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
@@ -181,7 +178,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     {section === "reports" && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[["Emisiones", String(data.count || 0)], ["Ventas", money(data.sales)], ["Recaudado", money(data.collected)], ["Por cobrar", money(data.pending)], ["Comisiones", money(data.commissions)]].map(([title, value]) => <div className="rounded-xl border bg-card p-5" key={title}><p className="text-sm text-muted-foreground">{title}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div>}
     <section className="overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">{["plans", "network", "emissions"].includes(section) ? <form className="flex gap-2" onSubmit={e => { e.preventDefault(); setQuery(search); setPage(0); }}><Input aria-label="Buscar registros" placeholder={section === "emissions" ? "Certificado, titular o documento" : "Buscar"} value={search} onChange={e => setSearch(e.target.value)} /><Button type="submit" variant="outline" size="icon" aria-label="Buscar"><Search className="size-4" /></Button></form> : <span className="text-sm text-muted-foreground">{data.total} registros</span>}<Button variant="outline" disabled={busy || loading || !data.items.length} onClick={() => void exportRows()}><Download className="size-4" /> Exportar página</Button></div>
-      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-muted/50"><tr>{columns[section].map(([name]) => <th className="whitespace-nowrap px-4 py-3 font-medium" key={name}>{name}</th>)}{section !== "reports" && <th className="px-4 py-3">Acciones</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={columns[section].length + 1} className="p-10 text-center text-muted-foreground">Cargando registros…</td></tr> : !visible.length ? <tr><td colSpan={columns[section].length + 1} className="p-12 text-center text-muted-foreground">No hay registros para mostrar.{editor && (section !== "dispatches" || communicationsTab === "history" || !lookup.can_configure_communications) && section !== "reports" && section !== "billing" ? " Usa la acción superior para comenzar." : ""}</td></tr> : visible.map((r, i) => <tr key={String(r.id || i)} className="border-t hover:bg-muted/30">{columns[section].map(([name, render]) => <td key={name} className="px-4 py-3">{render(r)}</td>)}{section !== "reports" && <td className="min-w-44 px-4 py-3"><div className="flex flex-wrap gap-2">
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-muted/50"><tr>{columns[section].map(([name]) => <th className="whitespace-nowrap px-4 py-3 font-medium" key={name}>{name}</th>)}{section !== "reports" && <th className="px-4 py-3">Acciones</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={columns[section].length + 1} className="p-10 text-center text-muted-foreground">Cargando registros…</td></tr> : !visible.length ? <tr><td colSpan={columns[section].length + 1} className="p-12 text-center text-muted-foreground">No hay registros para mostrar.{editor && section !== "reports" && section !== "billing" ? " Usa la acción superior para comenzar." : ""}</td></tr> : visible.map((r, i) => <tr key={String(r.id || i)} className="border-t hover:bg-muted/30">{columns[section].map(([name, render]) => <td key={name} className="px-4 py-3">{render(r)}</td>)}{section !== "reports" && <td className="min-w-44 px-4 py-3"><div className="flex flex-wrap gap-2">
         {section === "plans" && manager && <Button size="sm" variant="outline" onClick={() => planForm(r)}>Editar</Button>}
         {section === "network" && manager && lookup.global_access && <Button size="sm" variant="outline" onClick={() => profileForm(r)}>Editar</Button>}
         {section === "emissions" && <><Button size="sm" variant="outline" onClick={() => void download(`/emissions/${r.id}/letter`, `${r.code}.pdf`)}>Carta PDF</Button>{editor && r.status === "issued" && r.payment_status === "pending" && <Button size="sm" variant="outline" onClick={() => setModal({ title: "Confirmar cobro completo", path: `/emissions/${r.id}/payment`, fields: [{ name: "payment_status", label: "Destino del dinero", options: opts("collected_by_seller", ...(lookup.global_access ? ["paid_to_abissol"] : [])) }, { name: "reference", label: "Referencia del cobro" }], description: `Se registrará el cobro de ${money(r.price)}.` })}>Registrar cobro</Button>}{manager && r.status === "issued" && r.payment_status === "pending" && <Button size="sm" variant="outline" onClick={() => setModal({ title: "Anular emisión", path: `/emissions/${r.id}/cancel`, fields: [reason] })}>Anular</Button>}</>}

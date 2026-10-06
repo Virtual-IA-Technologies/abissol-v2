@@ -20,8 +20,6 @@ const AccessPanel = lazy(() => import("@/pages/settings-panels/access-panel"));
 const ConfigurationPage = lazy(() => import("@/pages/settings-panels/configuration-page"));
 const AppearancePanel = lazy(() => import("@/pages/settings-panels/appearance-panel"));
 const PersonalAppearancePage = lazy(() => import("@/pages/settings-panels/personal-appearance-page"));
-const SmtpPanel = lazy(() => import("@/pages/settings-panels/smtp-panel"));
-const WhatsappPanel = lazy(() => import("@/pages/settings-panels/whatsapp-panel"));
 const MessageTemplatesPanel = lazy(() => import("@/pages/settings-panels/message-templates-panel"));
 const AviSettingsPanel = lazy(() => import("@/pages/settings-panels/avi-settings-panel"));
 const AuditPage = lazy(() => import("@/pages/audit/audit-page"));
@@ -56,7 +54,9 @@ export default function Home({
             <Route path="*" element={<Navigate to="/documentos/archivos" replace />} />
           </> : <>
             <Route path="inicio" element={<Navigate to="/inicio" replace />} />
-            {["plans", "network", "emissions", "dispatches", "liquidations", "billing", "reports"].map(section => <Route key={section} path={`medical/${section}`} element={<AccessRoute menu={`medical-${section}`}><MedicalPage key={section} section={section} /></AccessRoute>} />)}
+            <Route path="medical/plans" element={<AccessRoute menu="medical-plans"><Navigate to="/plataforma/medical/emissions?tab=plans" replace /></AccessRoute>} />
+            <Route path="medical/dispatches" element={<AccessRoute menu="medical-dispatches"><Navigate to="/plataforma/medical/emissions?tab=dispatches" replace /></AccessRoute>} />
+            {["network", "emissions", "liquidations", "billing", "reports"].map(section => <Route key={section} path={`medical/${section}`} element={<AccessRoute menu={section === "emissions" ? ["medical-emissions", "medical-plans", "medical-dispatches"] : `medical-${section}`}><MedicalPage key={section} section={section} /></AccessRoute>} />)}
             <Route path="administracion/usuarios" element={<AccessRoute menu="usuarios"><UsersPanel /></AccessRoute>} />
             <Route path="administracion/roles" element={<AccessRoute menu="roles"><RolesPanel /></AccessRoute>} />
             <Route path="administracion/accesos" element={<AccessRoute menu="accesos"><AccessPanel /></AccessRoute>} />
@@ -68,8 +68,8 @@ export default function Home({
             <Route path="sistema/configuracion" element={<ConfigurationPage />}>
               <Route index element={<ConfigurationIndex />} />
               <Route path="apariencia" element={<AccessRoute menu="apariencia"><AppearancePanel /></AccessRoute>} />
-              <Route path="smtp" element={<AccessRoute menu="smtp"><SmtpPanel /></AccessRoute>} />
-              <Route path="whatsapp" element={<AccessRoute menu="whatsapp"><WhatsappPanel /></AccessRoute>} />
+              <Route path="smtp" element={<AccessRoute menu="smtp"><Navigate to="/plataforma/medical/emissions?tab=settings&channel=email" replace /></AccessRoute>} />
+              <Route path="whatsapp" element={<AccessRoute menu="whatsapp"><Navigate to="/plataforma/medical/emissions?tab=settings&channel=whatsapp" replace /></AccessRoute>} />
               <Route path="plantillas" element={<AccessRoute menu="plantillas"><MessageTemplatesPanel /></AccessRoute>} />
             </Route>
             <Route path="sistema/auditoria" element={<AccessRoute menu="auditoria"><AuditPage /></AccessRoute>} />
@@ -93,8 +93,6 @@ function DocumentsRedirect() {
 function ConfigurationIndex() {
   const { can } = useAuth();
   if (can("apariencia")) return <Navigate to="apariencia" replace />;
-  if (can("smtp")) return <Navigate to="smtp" replace />;
-  if (can("whatsapp")) return <Navigate to="whatsapp" replace />;
   if (can("plantillas")) return <Navigate to="plantillas" replace />;
   return <Navigate to="/inicio" replace />;
 }

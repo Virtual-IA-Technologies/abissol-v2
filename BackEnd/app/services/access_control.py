@@ -140,6 +140,13 @@ def effective_menu_tree(
     rows = menus if menus is not None else db.query(Menu).filter(Menu.is_active.is_(True)).all()
     resolved = resolved if resolved is not None else effective_access(db, user, rows)
     visible_rows = rows if include_hidden else [menu for menu in rows if menu.is_visible]
+    if not include_hidden:
+        # Navigation into a workspace is not permission to read its emissions.
+        # A plans-only/dispatches-only user must still reach their authorized tab.
+        workspace = next((menu for menu in visible_rows if menu.slug == "medical-emissions"), None)
+        allowed_tab = next((resolved[menu.id] for menu in rows if menu.slug in {"medical-plans", "medical-dispatches"} and ACCESS_RANK[resolved.get(menu.id, ("none", ""))[0]] >= 1), None)
+        if workspace and allowed_tab and resolved.get(workspace.id, ("none", ""))[0] == "none":
+            resolved = {**resolved, workspace.id: ("lector", allowed_tab[1])}
     return menu_tree(visible_rows, resolved, effective_only=True)
 
 

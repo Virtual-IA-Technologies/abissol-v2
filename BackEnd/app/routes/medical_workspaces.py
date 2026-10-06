@@ -4,7 +4,7 @@ from typing import Annotated, Literal
 from pydantic import Field
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import Response
-from sqlalchemy import func, or_
+from sqlalchemy import case, func, or_
 from sqlalchemy.orm import Session
 
 from . import medical as m
@@ -43,14 +43,19 @@ def meta_access(user):
     m.global_only(user)
 
 
+def meta_state(db, status):
+    query = db.query(m.Dispatch.id).filter(m.Dispatch.issuance_id == m.Issuance.id, m.Dispatch.kind == META_KIND,
+                                          m.Dispatch.status == ("sent" if status == "pending" else status))
+    if status == "pending":
+        query = query.filter(m.Dispatch.channel == "email")
+    exists = query.exists()
+    return ~exists if status == "pending" else exists
+
+
 def meta_query(db, user, status="pending", search="", starts_on=None, ends_on=None):
     query = m.scope(db, user).filter(m.Issuance.status == "issued")
-    sent = db.query(m.Dispatch.issuance_id).filter(m.Dispatch.kind == META_KIND, m.Dispatch.status == "sent", m.Dispatch.channel == "email", m.Dispatch.issuance_id.is_not(None))
-    if status == "pending":
-        query = query.filter(~m.Issuance.id.in_(sent.scalar_subquery()))
-    elif status != "all":
-        ids = db.query(m.Dispatch.issuance_id).filter(m.Dispatch.kind == META_KIND, m.Dispatch.status == status)
-        query = query.filter(m.Issuance.id.in_(ids.scalar_subquery()))
+    if status != "all":
+        query = query.filter(meta_state(db, status))
     if search:
         query = query.filter(or_(m.Issuance.code.contains(search), m.Issuance.customer.contains(search), m.Issuance.document_number.contains(search)))
     if starts_on:
@@ -67,13 +72,16 @@ def meta_list(status: Literal["pending", "sent", "failed", "uncertain", "all"] =
     query = meta_query(db, user, status, search, starts_on, ends_on)
     emissions = query.order_by(m.Issuance.id.desc()).offset(offset).limit(limit).all()
     ids = [e.id for e in emissions]
-    latest = {}
-    for dispatch in db.query(m.Dispatch).filter(m.Dispatch.issuance_id.in_(ids), m.Dispatch.kind == META_KIND).order_by(m.Dispatch.id):
-        latest[dispatch.issuance_id] = dispatch
+    latest_ids = db.query(func.max(m.Dispatch.id)).filter(m.Dispatch.issuance_id.in_(ids), m.Dispatch.kind == META_KIND).group_by(m.Dispatch.issuance_id)
+    latest = {row.issuance_id: row for row in db.query(m.Dispatch).filter(m.Dispatch.id.in_(latest_ids.scalar_subquery()))} if ids else {}
     items = [{**m.dump(e), "dispatch_status": latest[e.id].status if e.id in latest else "pending",
               "last_dispatch_at": str(latest[e.id].created_at) if e.id in latest else None} for e in emissions]
-    return {"items": items, "total": query.count(), "recipient": business_settings(db)["metafin_email"],
-            "summary": {key: meta_query(db, user, key, search, starts_on, ends_on).count() for key in ("pending", "sent", "failed")}}
+    states = ("pending", "sent", "failed", "uncertain")
+    counts = meta_query(db, user, "all", search, starts_on, ends_on).with_entities(
+        func.count(m.Issuance.id), *[func.sum(case((meta_state(db, key), 1), else_=0)) for key in states]).one()
+    totals = {"all": counts[0], **{key: int(value or 0) for key, value in zip(states, counts[1:])}}
+    return {"items": items, "total": totals[status], "recipient": business_settings(db)["metafin_email"],
+            "summary": {key: totals[key] for key in ("pending", "sent", "failed")}}
 
 
 class MetaSelection(Payload):

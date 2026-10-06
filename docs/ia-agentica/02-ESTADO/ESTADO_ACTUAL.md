@@ -1,5 +1,16 @@
 # Estado actual
 
+## Navegación consolidada y consultas — 06/10/2026
+
+Planes y Comunicaciones dejan de ser entradas del menú lateral: se accede desde
+Emisiones / Planes y Emisiones / Envíos. Red comercial permanece. Correo y WhatsApp
+se configuran en Emisiones / Configuración, exclusivamente por Programador.
+Las rutas anteriores redirigen; se mantienen permisos independientes y datos.
+Migración 0008 oculta las entradas duplicadas y añade índice de estado META.
+Catálogos reutilizados al filtrar/paginar; consultas por sección, red comercial
+sin doble listado, liquidaciones sin consultas por emisión y META con resumen
+agregado y solo el último intento por fila. Ver `03-MODULOS/NAVEGACION_OPTIMIZADA.md`.
+
 ## Seis pestañas de Emisiones y cuatro de Liquidaciones — 06/10/2026
 
 Espacios de trabajo completos con pestañas inferiores. Emisiones incorpora resumen

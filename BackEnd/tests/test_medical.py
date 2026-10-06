@@ -25,7 +25,7 @@ class MedicalTests(unittest.TestCase):
             self.admin_id, self.reader_id = admin.id, reader.id
         refs = self.client.get(API + "/lookups?section=network", headers=self.headers).json()
         self.source_id = refs["sources"][0]["id"]
-        self.plan_id = refs["plans"][0]["id"]
+        self.plan_id = self.client.get(API + "/plans", headers=self.headers).json()["items"][0]["id"]
         self.profile_id = self.post("/profiles", {"user_id": self.admin_id, "source_id": self.source_id, "kind": "responsible"})["id"]
 
     def post(self, path, payload, status=200, headers=None):
