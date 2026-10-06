@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..utils.time import utc_now
 
 from ..database import get_db
+from ..bootstrap import MENUS
 from ..models.rol import Rol
 from ..models.user import Usuario
 from ..models.wolverine import AccessGrant, Menu
@@ -43,6 +44,10 @@ CORE_MENU_ROUTES = {
     "documentacion": "/plataforma/sistema/documentacion",
     "devops": "/plataforma/sistema/devops",
 }
+# Las pantallas implementadas tienen rutas independientes de su jerarquía visual.
+# Usar el catálogo evita olvidar módulos nuevos al habilitar edición/reordenación.
+CORE_MENU_ROUTES.update({slug: route for slug, _, route, _, _, _ in MENUS if route})
+IMPLEMENTED_MENU_SLUGS = {slug for slug, *_ in MENUS} | CORE_MENU_ROUTES.keys()
 
 
 def _ancestor_chain(db: Session, parent_id: int | None) -> list[Menu]:
@@ -205,7 +210,7 @@ def update_menu(
     menu = db.get(Menu, menu_id)
     if not menu:
         raise HTTPException(status_code=404, detail="Menú no encontrado")
-    if menu.slug in CORE_MENU_ROUTES and payload.slug != menu.slug:
+    if menu.slug in IMPLEMENTED_MENU_SLUGS and payload.slug != menu.slug:
         raise HTTPException(status_code=409, detail="El slug de una ruta implementada no se puede cambiar")
     if menu.slug in CORE_MENU_SLUGS and not payload.is_active:
         raise HTTPException(status_code=409, detail="El estado activo de una opción central no se puede cambiar")

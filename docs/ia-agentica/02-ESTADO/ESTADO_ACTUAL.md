@@ -1,5 +1,16 @@
 # Estado actual
 
+## Corrección de navegación al reorganizar menús — 05/10/2026
+
+El editor recalculaba rutas de negocio como `/medical/medical-plans` al guardar
+o mover el módulo. Las pantallas reales están en `/plataforma/medical/*`.
+Las rutas implementadas se registran ahora automáticamente desde el catálogo
+del backend y se muestran protegidas en el editor. Se pueden cambiar nombres
+y posiciones conservando las rutas. Migración 0003_medical_routes repara solo
+las siete direcciones, sin alterar PROGRAMAS, orden, padres ni permisos.
+Prueba de regresión: renombrar/reordenar módulo, editar nombre de opción y
+rechazar cambios de identificador vinculados a pantallas.
+
 ## Negocio ABISSOL — 05/10/2026
 
 Siete opciones nuevas y módulo Negocio ABISSOL: planes, red comercial, emisiones,

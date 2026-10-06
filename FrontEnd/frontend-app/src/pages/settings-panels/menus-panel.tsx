@@ -35,9 +35,36 @@ type MenuForm = { parent_id: number | null; nombre: string; slug: string; ruta: 
 type MenuDoubleClick = "edit" | "none";
 const MENU_DOUBLE_CLICK: readonly MenuDoubleClick[] = ["edit", "none"];
 const FIXED_ROUTES: Record<string, string> = {
+  "inicio": "/inicio",
+  "medical-plans": "/plataforma/medical/plans",
+  "medical-network": "/plataforma/medical/network",
+  "medical-emissions": "/plataforma/medical/emissions",
+  "medical-dispatches": "/plataforma/medical/dispatches",
+  "medical-liquidations": "/plataforma/medical/liquidations",
+  "medical-billing": "/plataforma/medical/billing",
+  "medical-reports": "/plataforma/medical/reports",
+  "usuarios": "/plataforma/administracion/usuarios",
+  "roles": "/plataforma/administracion/roles",
+  "accesos": "/plataforma/administracion/accesos",
+  "menus": "/plataforma/sistema/menus",
+  "auditoria": "/plataforma/sistema/auditoria",
+  "calendario": "/plataforma/sistema/calendario",
+  "notificaciones": "/plataforma/sistema/notificaciones",
+  "documentacion": "/plataforma/sistema/documentacion",
+  "devops": "/plataforma/sistema/devops",
+  "configuracion": "/plataforma/sistema/configuracion",
+  "general": "/plataforma/sistema/configuracion/general",
+  "apariencia": "/plataforma/sistema/configuracion/apariencia",
+  "smtp": "/plataforma/sistema/configuracion/smtp",
+  "whatsapp": "/plataforma/sistema/configuracion/whatsapp",
+  "plantillas": "/plataforma/sistema/configuracion/plantillas",
+  "avi-configuracion": "/plataforma/automatizacion/avi",
+  "documentos": "/documentos/archivos",
+  "seccion-configuracion": "/plataforma/seccion/configuracion",
 };
 
 const emptyForm = (): MenuForm => ({ parent_id: null, nombre: "", slug: "", ruta: "", icono: "", orden: 0, is_visible: true, is_active: true, tipo: "modulo" });
+const PROTECTED_SLUGS = new Set([...Object.keys(FIXED_ROUTES), "medical", "plataforma", "usuarios-seguridad", "sistema", "automatizacion", "modulo-documentos"]);
 const normalizeIconSearch = (value: string) => value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 const kindLabel = (tipo: MenuKind) => ({ seccion: "Sección", modulo: "Módulo", menu: "Menú", submenu: "Submenú", pestana: "Pestaña" }[tipo]);
 const rowTone = (tipo: MenuKind) => ({
@@ -96,7 +123,7 @@ export default function MenusPanel() {
   const [doubleClickAction, setDoubleClickAction] = useDoubleClickPreference<MenuDoubleClick>("menus", MENU_DOUBLE_CLICK, can("menus", "editor") ? "edit" : "none");
   const rows = useMemo(() => flatten(menus), [menus]);
   const routePreview = routeFor(form, rows);
-  const hasFixedRoute = editing !== null && Boolean(FIXED_ROUTES[rows.find((row) => row.id === editing)?.slug ?? ""]);
+  const hasFixedRoute = editing !== null && PROTECTED_SLUGS.has(rows.find((row) => row.id === editing)?.slug ?? "");
   const parentOptions = rows.filter((row) => {
     if (form.tipo === "seccion") return row.tipo === "modulo" && row.parent_id === null;
     if (form.tipo === "modulo") return row.tipo === "seccion";
