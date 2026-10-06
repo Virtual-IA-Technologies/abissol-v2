@@ -1,5 +1,25 @@
 # Estado actual
 
+## Nueva emisión y consulta DNI — 05/10/2026
+
+Formulario dedicado con secciones de programa/emisor, titular y vigencia/pago;
+resumen de precio, inicio y fin de cobertura; diseño adaptable y acentos verdes.
+DNI consulta automáticamente a los ocho dígitos, sin botón de validación. Reutiliza
+el endpoint autenticado smart-forms y APIperú exclusivamente desde el backend.
+Nombres en orden nombres + apellido paterno + apellido materno. Cancela/ignora
+respuestas de documentos anteriores y conserva una edición manual durante la consulta.
+Si el proveedor falla permite completar los datos manualmente; CE/pasaporte manuales.
+
+Inicio precargado en mañana según America/Lima, mínimo mañana en el calendario y
+validación al guardar. Backend ya rechaza hoy/fechas pasadas; dos pruebas específicas
+verifican mañana/fecha posterior, permisos, DNI incompleto, errores y orden de nombres.
+Edge local verificó consulta automática simulada, respuesta tardía, ingreso manual,
+calendario y escritorio/móvil incluso con zona del navegador Asia/Tokyo.
+TypeScript/lint correctos. Parámetros privados de APIperú trasladados desde Laravel
+al entorno remoto V2 con respaldo, sin copiar secretos al repositorio. Prueba con
+DNI real pendiente de autorización específica; las pruebas visuales usan respuestas
+simuladas y no registran ventas ni envían identificadores al proveedor.
+
 ## Migración real Laravel — 05/10/2026
 
 Migradas las cuentas y el negocio de app.abissol.org al piloto v2.abissol.org,

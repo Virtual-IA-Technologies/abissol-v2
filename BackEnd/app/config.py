@@ -80,7 +80,7 @@ def get_settings() -> Settings:
         expected_db_name=expected_db_name,
         frontend_url=os.getenv("FRONTEND_URL", "http://localhost:5185").strip().rstrip("/"),
         password_reset_minutes=int(os.getenv("PASSWORD_RESET_MINUTES", "30")),
-        apiperu_base_url=os.getenv("APIPERU_BASE_URL", "https://api.apiperu.dev").strip().rstrip("/"),
+        apiperu_base_url=os.getenv("APIPERU_BASE_URL", "https://apiperu.dev/api").strip().rstrip("/"),
         apiperu_api_token=os.getenv("APIPERU_API_TOKEN", "").strip(),
         apiperu_timeout_seconds=float(os.getenv("APIPERU_TIMEOUT_SECONDS", "8")),
     )

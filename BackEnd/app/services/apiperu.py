@@ -43,6 +43,8 @@ def lookup_document(document_type: str, document_number: str) -> ApiPeruResult:
         body = response.json()
     except ValueError as exc:
         raise ApiPeruUnavailable("El proveedor devolvió una respuesta inválida") from exc
+    if not isinstance(body, dict):
+        raise ApiPeruUnavailable("El proveedor devolvió una respuesta inválida")
     if not body.get("success") or not isinstance(body.get("data"), dict):
         if body.get("code") == "document_not_found":
             raise ApiPeruNotFound("No se encontró el documento")
@@ -54,10 +56,13 @@ def public_document_result(document_type: str, document_number: str, data: dict)
     def first(*keys: str):
         return next((data.get(key) for key in keys if data.get(key) not in (None, "")), None)
 
+    structured_name = ' '.join(str(value).strip() for value in (
+        first('nombres'), first('apellido_paterno', 'apellidoPaterno'), first('apellido_materno', 'apellidoMaterno')
+    ) if value)
     return {
         "document_type": document_type,
         "document_number": document_number,
-        "full_name": first("nombre_completo", "nombreCompleto", "nombres_completos"),
+        "full_name": structured_name or first("nombre_completo", "nombreCompleto", "nombres_completos"),
         "business_name": first("razon_social", "razonSocial", "nombre_o_razon_social"),
         "first_names": first("nombres"),
         "paternal_surname": first("apellido_paterno", "apellidoPaterno"),

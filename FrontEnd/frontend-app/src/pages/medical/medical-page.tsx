@@ -3,6 +3,7 @@ import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, W
 import axios from "axios";
 import api from "@/lib/api";
 import { BillingConfiguration, BillingHistory } from "./billing-history";
+import { EmissionForm } from "./emission-form";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,7 +74,6 @@ export default function MedicalPage({ section }: { section: string }) {
   useEffect(() => { void load(); }, [load]);
   const userName = (id: Value) => { const account = lookup.users.find(u => u.id === Number(id)); return account ? `${account.name}${account.is_active ? "" : " · Cuenta desactivada"}` : `Usuario ${id}`; };
   const profileName = (id: Value) => { if (!id) return "Consolidado general"; const p = lookup.profiles.find(p => p.id === Number(id)); return p ? String(p.display_name || userName(p.user_id)) : `Perfil ${id}`; };
-  const planOptions = lookup.plans.filter(p => p.active).map(p => ({ value: String(p.id), label: `${p.name} · ${money(p.price)}` }));
   const sourceOptions = lookup.sources.filter(p => p.active).map(p => ({ value: String(p.id), label: String(p.name) }));
   const profileOptions = (kind?: string) => lookup.profiles.filter(p => p.active && (section !== "emissions" || p.user_id) && (kind ? p.kind === kind : p.kind !== "source_admin")).map(p => ({ value: String(p.id), label: `${p.display_name || userName(p.user_id)} · ${labels[String(p.kind)]}` }));
   const emissionField: Field = { name: "issuance_id", label: "Emisión", options: lookup.emissions.map(e => ({ value: String(e.id), label: `${e.code} · ${e.customer}` })), help: "Busca por certificado, titular o documento dentro de tu ámbito." };
@@ -109,12 +109,7 @@ export default function MedicalPage({ section }: { section: string }) {
   function create() {
     if (section === "plans") return planForm();
     if (section === "network") return profileForm();
-    if (section === "emissions") return setModal({ title: "Nueva emisión", path: "/emissions", initial: { document_type: "DNI", payment_method: "cash", payment_status: "pending" }, description: "Los importes se toman del plan al guardar. La vigencia comienza desde mañana, hora de Lima.", fields: [
-      { name: "plan_id", label: "Plan", options: planOptions }, { name: "emitter_id", label: "Emisor", options: profileOptions() },
-      { name: "document_type", label: "Tipo de documento", options: opts("DNI", "CE", "PASSPORT") }, { name: "document_number", label: "Número de documento" }, { name: "customer", label: "Nombres y apellidos del titular" },
-      { name: "email", label: "Correo", type: "email", optional: true }, { name: "phone", label: "Celular", optional: true }, { name: "starts_on", label: "Inicio de vigencia", type: "date" },
-      { name: "payment_method", label: "Medio de pago", options: opts("cash", "transfer", "card", "online") }, { name: "payment_status", label: "Estado del pago", options: opts("pending", "collected_by_seller", ...(lookup.global_access ? ["paid_to_abissol"] : [])) },
-    ] });
+    if (section === "emissions") return setModal({ title: "Nueva emisión", path: "/emissions", fields: [] });
     if (section === "liquidations") return setModal({ title: "Preparar liquidación", path: "/liquidations", initial: { kind: "seller" }, description: "Incluye las emisiones cobradas del período que aún no tengan una liquidación activa del mismo tipo. El depósito del vendedor corresponde al íntegro cobrado.", fields: [
       { name: "kind", label: "Tipo", options: opts("seller", ...(lookup.global_access ? ["meta", "platform"] : [])) }, { name: "responsible_id", label: "Responsable", options: profileOptions("responsible") }, { name: "starts_on", label: "Desde", type: "date" }, { name: "ends_on", label: "Hasta", type: "date" },
     ] });
@@ -176,7 +171,8 @@ export default function MedicalPage({ section }: { section: string }) {
       <footer className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"><span>{data.total} registros · {section === "plans" || section === "network" || section === "reports" ? "Listado completo" : `Página ${page + 1}`}</span>{!["plans", "network", "reports"].includes(section) && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={(page + 1) * 25 >= data.total || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button></div>}</footer>
     </section>
     {invoiceId !== null && <BillingHistory key={invoiceId} id={invoiceId} close={() => setInvoiceId(null)} download={download} />}
-    {modal && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(result.status === "failed" ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(); }} />}
+    {modal?.path === "/emissions" && <EmissionForm plans={lookup.plans.filter(p => p.active)} emitters={profileOptions()} globalAccess={lookup.global_access} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Emisión registrada correctamente."); await load(); }} />}
+    {modal && modal.path !== "/emissions" && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(result.status === "failed" ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(); }} />}
     <Dialog open={!!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Detalle de liquidación</DialogTitle><DialogDescription>{detail?.legacy_id ? "Liquidación importada: consulta de la conciliación original, sin modificar sus estados históricos." : "Importes conservados al preparar el período."}</DialogDescription></DialogHeader>{detail && <div className="space-y-4"><p>Depósito requerido: <strong>{money(detail.deposit_required)}</strong> · Adjuntado: <strong>{money(detail.voucher_total)}</strong></p><h3 className="font-medium">Emisiones incluidas</h3>{detail.items.map(i => <div key={String(i.id)} className="flex justify-between border-b py-2 text-sm"><span>Emisión #{String(i.issuance_id)}</span><span>Venta {money(i.sale)} · Comisión {money(i.commission)} · Depósito {money(i.deposit)}</span></div>)}<h3 className="font-medium">Comprobantes</h3>{detail.vouchers.length ? detail.vouchers.map(v => <div key={String(v.id)} className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void download(`/vouchers/${v.id}/file`, String(v.filename))}>{String(v.reference)} · {money(v.amount)} <Download className="size-4" /></Button>{editor && ["draft", "observed"].includes(detail.status) && <Button variant="outline" onClick={() => { setDetail(null); setModal({ title: "Retirar comprobante", path: `/vouchers/${v.id}/void`, fields: [reason], description: "Se conserva el archivo y su auditoría. Podrás adjuntar el comprobante correcto." }); }}>Retirar</Button>}</div>) : <p className="text-sm text-muted-foreground">Sin comprobantes adjuntos.</p>}</div>}</DialogContent></Dialog>
   </main>;
 }
