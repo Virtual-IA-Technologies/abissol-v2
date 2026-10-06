@@ -11,6 +11,7 @@ from .config import get_settings
 from .database import Base, engine
 
 from .routes import documents
+from .routes import medical
 
 from .routes import document_tools
 
@@ -76,6 +77,7 @@ def health_ready():
 PREFIX = "/abissol/api/v1"
 
 app.include_router(auth.router, prefix=PREFIX, tags=["ABISSOL · Sesiones"])
+app.include_router(medical.router, prefix=PREFIX, tags=["ABISSOL · Negocio"])
 
 app.include_router(analytics.router, prefix=PREFIX, tags=["ABISSOL · Analítica"])
 

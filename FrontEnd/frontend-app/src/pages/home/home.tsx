@@ -11,6 +11,7 @@ import { useTheme } from "@/context/theme-context";
 import { AccessRoute } from "@/features/wolverine/access-route";
 import { useIsMobile } from "@/hooks/use-mobile";
 const ControlPanel = lazy(() => import("@/pages/home/control-panel"));
+const MedicalPage = lazy(() => import("@/pages/medical/medical-page"));
 
 const UsersPanel = lazy(() => import("@/pages/settings-panels/users-panel"));
 const RolesPanel = lazy(() => import("@/pages/settings-panels/roles-panel"));
@@ -55,6 +56,7 @@ export default function Home({
             <Route path="*" element={<Navigate to="/documentos/archivos" replace />} />
           </> : <>
             <Route path="inicio" element={<Navigate to="/inicio" replace />} />
+            {["plans", "network", "emissions", "dispatches", "liquidations", "billing", "reports"].map(section => <Route key={section} path={`medical/${section}`} element={<AccessRoute menu={`medical-${section}`}><MedicalPage key={section} section={section} /></AccessRoute>} />)}
             <Route path="administracion/usuarios" element={<AccessRoute menu="usuarios"><UsersPanel /></AccessRoute>} />
             <Route path="administracion/roles" element={<AccessRoute menu="roles"><RolesPanel /></AccessRoute>} />
             <Route path="administracion/accesos" element={<AccessRoute menu="accesos"><AccessPanel /></AccessRoute>} />

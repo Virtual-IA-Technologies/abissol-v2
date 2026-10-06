@@ -1,5 +1,25 @@
 # Estado actual
 
+## Negocio ABISSOL — 05/10/2026
+
+Siete opciones nuevas y módulo Negocio ABISSOL: planes, red comercial, emisiones,
+comunicaciones, liquidaciones, facturación (borradores) y reportes. Migración
+aditiva 0002_medical, nueve tablas independientes, 31 menús de plataforma/negocio.
+Sin OTP WhatsApp, bandeja de correo ni aprobaciones generales. Conserva revisión
+financiera de liquidaciones. SISAP no se modifica.
+
+Planes configurables; emisión transaccional con snapshots, PDF y QR público sin
+datos personales; alcance por origen/responsable/emisor además de permisos de
+menú; cobros auditados; liquidaciones sin doble inclusión y adjuntos privados;
+comunicaciones mediante los conectores existentes. Facturación no envía a SUNAT
+y no asigna numeración fiscal hasta implementar/configurar el emisor electrónico.
+
+Alcance detallado y pendientes de paridad: `03-MODULOS/NEGOCIO_ABISSOL.md`.
+Verificación local: 19 pruebas backend aprobadas; migración MariaDB aplicada y
+Alembic sin diferencias; siete pantallas comprobadas en Edge, escritorio/móvil,
+sin errores JavaScript ni HTTP. Ninguna venta real ni comunicación de prueba.
+Las notas siguientes conservan el historial de la base anterior.
+
 ## Marca en navegación · 05/10/2026 19:08 America/Lima
 
 La cabecera del sidebar usa el símbolo oficial, nombre ABISSOL con acento verde

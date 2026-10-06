@@ -4,6 +4,14 @@ from .models import AccessGrant, Menu, Rol
 
 MENUS = [
     ("inicio", "Panel principal", "/inicio", "menu", None, "LayoutDashboard"),
+    ("medical", "Negocio ABISSOL", None, "modulo", None, "HeartPulse"),
+    ("medical-plans", "Planes de asistencia", "/plataforma/medical/plans", "menu", "medical", "HeartPulse"),
+    ("medical-network", "Red comercial", "/plataforma/medical/network", "menu", "medical", "Users"),
+    ("medical-emissions", "Emisiones", "/plataforma/medical/emissions", "menu", "medical", "FileText"),
+    ("medical-dispatches", "Comunicaciones", "/plataforma/medical/dispatches", "menu", "medical", "Send"),
+    ("medical-liquidations", "Liquidaciones", "/plataforma/medical/liquidations", "menu", "medical", "Wallet"),
+    ("medical-billing", "Facturación", "/plataforma/medical/billing", "menu", "medical", "Receipt"),
+    ("medical-reports", "Reportes comerciales", "/plataforma/medical/reports", "menu", "medical", "ChartNoAxesCombined"),
     ("plataforma", "Plataforma", None, "modulo", None, "Settings"),
     ("usuarios-seguridad", "Usuarios y seguridad", None, "menu", "plataforma", "Shield"),
     ("usuarios", "Usuarios", "/plataforma/administracion/usuarios", "submenu", "usuarios-seguridad", "Users"),
@@ -58,5 +66,16 @@ def seed_platform(db: Session):
                 db.add(AccessGrant(role_id=roles["Usuario"].id, menu_id=menu.id,
                                    access_level="editor" if slug in {"calendario", "documentos", "general"} else "lector"))
         menus[slug] = menu
+    db.flush()
+    from .models.medical import MedicalPlan, MedicalSource
+    for code, name, prefix, price, cost, commission in [
+        ("HAMPI-ESENCIAL", "Hampi Esencial", "HE", 55, 12, 15),
+        ("HAMPI-PLUS", "Hampi Plus", "HP", 255, 199, 25),
+    ]:
+        if not db.query(MedicalPlan.id).filter_by(code=code).first():
+            db.add(MedicalPlan(code=code, name=name, prefix=prefix, price=price,
+                provider_cost=cost, seller_commission=commission, platform_fee=0, validity_days=365))
+    if not db.query(MedicalSource.id).filter_by(code="ABISSOL").first():
+        db.add(MedicalSource(code="ABISSOL", name="ABISSOL"))
     db.flush()
     return roles

@@ -1,7 +1,13 @@
 # ABISSOL V2
 
 Base FastAPI + React derivada del código local de SIACAT V4 el 05/10/2026.
-Proyecto independiente, preparado para incorporar posteriormente el negocio de ABISSOL.
+Proyecto independiente con módulos comerciales ABISSOL en FastAPI y React.
+
+Negocio: planes, red comercial, emisiones con carta/QR, comunicaciones salientes,
+liquidaciones, preparación de facturación y reportes. Sin OTP WhatsApp, bandeja
+de correo ni aprobaciones generales. Facturación electrónica SUNAT todavía no
+habilitada; los registros fiscales son borradores internos. Alcance y configuración
+en [Negocio ABISSOL](docs/ia-agentica/03-MODULOS/NEGOCIO_ABISSOL.md).
 
 Conserva sesiones, usuarios, roles, permisos Wolverine, menús, auditoría, apariencia,
 calendario, notificaciones, documentos, documentación, búsqueda y componentes reutilizables.

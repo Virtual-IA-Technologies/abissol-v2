@@ -54,7 +54,7 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         return response.json(), {"Authorization": "Bearer " + response.json()["access_token"]}
 
-    def test_schema_and_routes_have_no_business_modules(self):
+    def test_schema_and_routes_have_no_source_business_modules(self):
         forbidden = ("em_", "sin_", "cpe_", "accounting", "cat_", "alp_", "mtc_", "abissol_sales")
         self.assertFalse([name for name in Base.metadata.tables if name.startswith(forbidden)])
         for path in app.openapi()["paths"]:
