@@ -18,3 +18,12 @@ y preparar los canales de comunicación que necesite la organización.
 
 Esta primera entrega contiene la plataforma. Las funciones comerciales de ABISSOL
 se incorporarán después de validar esta base.
+
+## Piloto y actualizaciones
+
+Abre https://v2.abissol.org/ e ingresa con tu cuenta administradora y la misma contraseña local.
+El piloto usa su propia base `abissol_v2`; los cambios locales de datos no se replican.
+
+En el entorno local, Sistema → DevOps permite consultar main, descargar cambios y subirlos a GitHub con una descripción. Publicar servidor exige main limpio y sincronizado; crea un respaldo de la base existente antes de migrar y comprueba la salud del servicio.
+En el piloto, DevOps muestra el historial; las actualizaciones se ejecutan desde local.
+Configuración privada: `BackEnd/.env` y `deployment/.env`, excluidos de Git. El frontend local usa `.env.development.local`; producción usa HTTPS en el dominio del piloto.
