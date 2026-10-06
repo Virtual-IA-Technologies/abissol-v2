@@ -13,12 +13,14 @@ Si el proveedor falla permite completar los datos manualmente; CE/pasaporte manu
 Inicio precargado en mañana según America/Lima, mínimo mañana en el calendario y
 validación al guardar. Backend ya rechaza hoy/fechas pasadas; dos pruebas específicas
 verifican mañana/fecha posterior, permisos, DNI incompleto, errores y orden de nombres.
-Edge local verificó consulta automática simulada, respuesta tardía, ingreso manual,
+Edge local y piloto HTTPS verificaron consulta automática simulada, respuesta tardía, ingreso manual,
 calendario y escritorio/móvil incluso con zona del navegador Asia/Tokyo.
 TypeScript/lint correctos. Parámetros privados de APIperú trasladados desde Laravel
 al entorno remoto V2 con respaldo, sin copiar secretos al repositorio. Prueba con
 DNI real pendiente de autorización específica; las pruebas visuales usan respuestas
 simuladas y no registran ventas ni envían identificadores al proveedor.
+Publicado en main y v2.abissol.org. Consultas DNI/RUC restringidas a edición de
+Emisiones o Facturación; no se puede eludir el permiso enviando otro slug de menú.
 
 ## Migración real Laravel — 05/10/2026
 

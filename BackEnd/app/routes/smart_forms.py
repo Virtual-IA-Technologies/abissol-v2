@@ -27,7 +27,9 @@ def document_lookup(
     identity: AuthIdentity = Depends(get_current_identity),
     db: Session = Depends(get_db),
 ):
-    _authorize(db, identity, payload.option_slug)
+    if payload.option_slug not in {'medical-emissions', 'medical-billing'}:
+        raise HTTPException(status_code=403, detail='La consulta de documentos requiere acceso comercial')
+    ensure_option_access(db, identity.effective_user, payload.option_slug, 'editor')
     try:
         result = lookup_document(payload.document_type, payload.document_number)
     except ApiPeruNotFound as exc:

@@ -25,6 +25,7 @@ class EmissionDniTests(unittest.TestCase):
             self.assertEqual(self.client.post(path,headers=self.headers,json={**payload,'document_number':'1234567'}).status_code,422)
             _, limited = self.login('reader')
             self.assertEqual(self.client.post(path,headers=limited,json=payload).status_code,403)
+            self.assertEqual(self.client.post(path,headers=limited,json={**payload,'option_slug':'inicio'}).status_code,403)
             self.assertEqual(provider.call_count,1)
         with patch('app.routes.smart_forms.lookup_document', side_effect=ApiPeruUnavailable('El proveedor no está disponible')):
             self.assertEqual(self.client.post(path,headers=self.headers,json=payload).status_code,503)
