@@ -54,6 +54,9 @@ sin reintento automático; duplicados o reenvíos requieren `force` confirmado.
 Un envío en curso bloquea el segundo intento. El reintento individual de afiliados
 no puede convertir un reporte META en una bienvenida. El XLSX usa celdas de texto
 para preservar ceros del documento y evitar ejecutar fórmulas.
+Reporte diario: once columnas del modelo Laravel. Mensual: ocho columnas con
+producto ESENCIAL/PLUS. Para migrados se recuperan nombres y apellidos originales
+del archivo cifrado; no se infieren apellidos a partir de un nombre completo.
 
 Migración `0007_business_settings`: solo tabla de ajustes comerciales. Importador
 `scripts/import_legacy_business_settings.py` lee cuatro claves autorizadas del

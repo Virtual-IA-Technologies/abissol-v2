@@ -1,4 +1,5 @@
 import unittest
+import json
 from io import BytesIO
 from zipfile import ZipFile
 from unittest.mock import patch
@@ -7,6 +8,9 @@ import test_medical as medical
 from app.models import AccessGrant, Menu, Usuario
 from app.models.medical import MedicalSource, MedicalIssuance, MedicalDispatch, MedicalLiquidation, MedicalBusinessSetting
 from app.models.settings import SmtpSetting
+from app.models.legacy import LegacyRecord
+from app.utils.secrets import encrypt_secret
+from app.services.medical_exports import meta_xlsx
 
 API = medical.API
 
@@ -77,6 +81,7 @@ class WorkspaceTests(unittest.TestCase):
             xml=ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
             ns={"s":"http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
             self.assertEqual(len(xml.findall(".//s:row",ns)),2)
+            self.assertEqual(len(xml.findall(".//s:row",ns)[0]),11)
             self.assertEqual(len(xml.findall(".//s:f",ns)),0)
             self.assertIn("=SUM(A1:A2)",archive.read("xl/worksheets/sheet1.xml").decode())
         with patch("app.routes.medical_workspaces.send_email") as send:
@@ -91,6 +96,11 @@ class WorkspaceTests(unittest.TestCase):
             result=self.client.get(API+f'/liquidations/{monthly["id"]}/meta-file/{kind}',headers=self.headers)
             self.assertEqual(result.status_code,200)
             self.assertTrue(result.content.startswith(signature))
+            if kind == "xlsx":
+                with ZipFile(BytesIO(result.content)) as archive:
+                    xml=ElementTree.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+                    self.assertEqual(len(xml.findall(".//s:row",ns)[0]),8)
+                    self.assertEqual(xml.findall(".//s:row",ns)[1][5].find("s:is/s:t",ns).text,"ESENCIAL")
         with patch("app.routes.medical_workspaces.send_email") as send:
             self.post(f'/liquidations/{monthly["id"]}/meta-send',{})
             self.assertEqual(len(send.call_args.kwargs["attachments"]),2)
@@ -103,6 +113,18 @@ class WorkspaceTests(unittest.TestCase):
             result=self.post("/meta-dispatches/send",{"issuance_ids":[emission["id"]]})
         self.assertEqual(result["status"],"uncertain")
         self.post("/meta-dispatches/send",{"issuance_ids":[emission["id"]]},409)
+
+    def test_original_names_are_preserved_for_meta(self):
+        emission=self.setup_emission()
+        with self.sessions() as db:
+            row=db.get(MedicalIssuance,emission["id"])
+            row.legacy_id=42
+            db.add(LegacyRecord(source_table="medical_issuances",source_key="42",checksum="0"*64,
+                payload_encrypted=encrypt_secret(json.dumps({"contractor_name":"ANA", "contractor_paternal_last_name":"PEREZ", "contractor_maternal_last_name":"LOPEZ"}))))
+            db.flush()
+            content=meta_xlsx([row],db,monthly=True)
+            with ZipFile(BytesIO(content)) as archive:
+                self.assertIn("PEREZ LOPEZ ANA",archive.read("xl/worksheets/sheet1.xml").decode())
 
     def test_restricted_user_cannot_access_meta_or_settings(self):
         emission=self.setup_emission()

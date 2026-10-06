@@ -92,7 +92,7 @@ def selected_emissions(db, user, ids, lock=False):
 @router.post("/meta-dispatches/export")
 def meta_export(payload: MetaSelection, db: Session = Depends(get_db), user=Depends(require_access("medical-emissions"))):
     meta_access(user)
-    return Response(meta_xlsx(selected_emissions(db, user, payload.issuance_ids)), media_type=MIME,
+    return Response(meta_xlsx(selected_emissions(db, user, payload.issuance_ids), db), media_type=MIME,
                     headers={"Content-Disposition": 'attachment; filename="altas-meta.xlsx"', "Cache-Control": "private, no-store"})
 
 
@@ -110,7 +110,7 @@ def send_meta(db, request, user, emissions, kind, force=False, liquidation=None)
         raise HTTPException(409, "Existe un envío en curso; revisa su resultado antes de repetir")
     if not force and query.filter(m.Dispatch.status.in_(["sent", "uncertain", "failed"])).first():
         raise HTTPException(409, "Hay envíos previos. Revisa el historial y confirma expresamente el reenvío")
-    content = meta_xlsx(emissions)
+    content = meta_xlsx(emissions, db, monthly=liquidation is not None)
     rows = [m.Dispatch(issuance_id=e.id, liquidation_id=liquidation.id if liquidation else None,
                        kind=kind, channel="email", recipient=recipient, status="sending", attempts=1, created_by=user.id) for e in emissions]
     db.add_all(rows)
@@ -167,7 +167,7 @@ def monthly_letter(row, count):
 def monthly_file(ident: int, kind: Literal["xlsx", "letter"], db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations"))):
     meta_access(user)
     row, emissions = monthly_emissions(db, user, ident)
-    content = meta_xlsx(emissions) if kind == "xlsx" else monthly_letter(row, len(emissions))
+    content = meta_xlsx(emissions, db, monthly=True) if kind == "xlsx" else monthly_letter(row, len(emissions))
     return Response(content, media_type=MIME if kind == "xlsx" else "application/pdf", headers={"Content-Disposition": 'attachment; filename="meta.' + ("xlsx" if kind == "xlsx" else "pdf") + '"', "Cache-Control": "private, no-store"})
 
 
