@@ -76,11 +76,16 @@ class ReasonInput(Payload):
 
 class LiquidationInput(Payload):
     kind: Literal["seller", "meta", "platform"]
-    responsible_id: int = Field(gt=0)
+    responsible_id: int | None = Field(default=None, gt=0)
+    issuance_ids: list[Annotated[int, Field(gt=0)]] | None = Field(default=None, min_length=1, max_length=1000)
     starts_on: date
     ends_on: date
     @model_validator(mode="after")
     def period(self):
+        if self.kind == "seller" and self.responsible_id is None:
+            raise ValueError("Selecciona al vendedor responsable")
+        if self.kind != "seller" and self.responsible_id is not None:
+            raise ValueError("META y plataforma son consolidados de todos los vendedores")
         if self.ends_on < self.starts_on or (self.ends_on - self.starts_on).days > 366:
             raise ValueError("El período debe estar ordenado y no superar un año")
         return self

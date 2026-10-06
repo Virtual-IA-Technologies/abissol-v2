@@ -1,5 +1,16 @@
 # Estado actual
 
+## Seis pestañas de Emisiones y cuatro de Liquidaciones — 06/10/2026
+
+Espacios de trabajo completos con pestañas inferiores. Emisiones incorpora resumen
+por vigencia, envíos de afiliados, altas META, vendedores, planes y configuración.
+Liquidaciones separa vendedores, META mensual, plataforma e historial; vista previa,
+selección y consolidado sin exigir un responsable para META/plataforma.
+Excel y carta mensual, envío confirmado con protección de duplicados y depósitos
+AFOCAT según Laravel productivo. Se conservan importes y estados históricos.
+Configuración comercial con migración 0007; hora de referencia sin activar cron.
+Detalle de alcance y comprobaciones: `03-MODULOS/PESTANAS_COMERCIALES.md`.
+
 ## Comunicaciones y pestañas — 05/10/2026
 
 Pestañas inferiores en Facturación y Comunicaciones. Correo y WhatsApp separados,

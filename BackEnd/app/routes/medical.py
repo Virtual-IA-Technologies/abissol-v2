@@ -15,7 +15,7 @@ import qrcode
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, Response, HTMLResponse, JSONResponse
-from sqlalchemy import false, func, or_
+from sqlalchemy import false, func, or_, case
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -284,8 +284,17 @@ def filtered(query, search, starts_on, ends_on):
 
 @router.get("/emissions")
 def emissions(search: str = Query("", max_length=180), starts_on: date | None = None, ends_on: date | None = None,
-              offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), db: Session = Depends(get_db), user=Depends(require_access("medical-emissions"))):
-    return page(filtered(scope(db, user), search, starts_on, ends_on), offset, limit)
+              offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), state: str = "all", db: Session = Depends(get_db), user=Depends(require_access("medical-emissions"))):
+    query = filtered(scope(db, user), search, starts_on, ends_on)
+    today = datetime.now(ZoneInfo("America/Lima")).date()
+    states = {"active": (Issuance.status == "issued") & (Issuance.starts_on <= today) & (Issuance.ends_on >= today),
+              "upcoming": (Issuance.status == "issued") & (Issuance.starts_on > today),
+              "expired": (Issuance.status == "issued") & (Issuance.ends_on < today), "cancelled": Issuance.status == "cancelled"}
+    if state != "all" and state not in states:
+        raise HTTPException(422, "Estado de vigencia inválido")
+    counts = query.with_entities(func.count(Issuance.id), *[func.sum(case((condition, 1), else_=0)) for condition in states.values()]).one()
+    summary = dict(zip(["all", *states], [int(value or 0) for value in counts]))
+    return {**page(query.filter(states[state]) if state != "all" else query, offset, limit), "summary": summary}
 
 
 @router.post("/emissions")
@@ -413,30 +422,77 @@ def liquidation_scope(db, user):
     return query.filter(Liquidation.kind == "seller", Liquidation.responsible_id.in_(profiles_scope(db, user).with_entities(Profile.id).scalar_subquery()))
 
 
+def liquidation_candidates(db, user, payload, lock=False):
+    own = profile(db, user)
+    if not admin(user) and (not own or own.kind == "emitter" or payload.kind != "seller"):
+        raise HTTPException(403, "Tu perfil no puede preparar esta liquidación")
+    if payload.kind == "seller":
+        find(profiles_scope(db, user).filter(Profile.kind == "responsible"), payload.responsible_id)
+    eligible = scope(db, user).filter(Issuance.status == "issued", Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
+    if payload.kind == "seller":
+        eligible = eligible.filter(Issuance.responsible_id == payload.responsible_id, Issuance.payment_status.in_(["collected_by_seller", "paid_to_abissol", "settled"]))
+    used = db.query(Item.issuance_id).filter(Item.active_key.like(payload.kind + ":%"))
+    eligible = eligible.filter(~Issuance.id.in_(used.scalar_subquery()))
+    if payload.issuance_ids is not None:
+        eligible = eligible.filter(Issuance.id.in_(payload.issuance_ids))
+    eligible = eligible.order_by(Issuance.id)
+    rows = (eligible.with_for_update() if lock else eligible).limit(1001).all()
+    if len(rows) > 1000:
+        raise HTTPException(422, "Reduce el período: máximo 1000 emisiones por liquidación")
+    if payload.issuance_ids and len(rows) != len(set(payload.issuance_ids)):
+        raise HTTPException(409, "La selección contiene emisiones no disponibles; actualiza la vista previa")
+    return rows
+
+
+def liquidation_amounts(db, emission, kind):
+    commission = emission.seller_commission if kind == "seller" else emission.meta_commission if kind == "meta" else emission.platform_fee
+    deposit = commission if kind != "seller" else Decimal(0)
+    if kind == "seller" and emission.payment_status == "collected_by_seller":
+        source = db.get(Source, emission.source_id)
+        responsible = db.get(Profile, emission.responsible_id)
+        afocat_managed = source.kind == "afocat" and responsible.kind == "responsible"
+        deposit = emission.provider_cost if afocat_managed else (emission.paid_amount or emission.price)
+    return commission, deposit
+
+
 @router.get("/liquidations")
-def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations"))):
-    return page(liquidation_scope(db, user), offset, limit)
+def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), kind: str | None = None,
+                 search: str = Query("", max_length=180), status: str | None = None, starts_on: date | None = None, ends_on: date | None = None,
+                 db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations"))):
+    query = liquidation_scope(db, user)
+    if kind:
+        if kind not in {"seller", "meta", "platform"}: raise HTTPException(422, "Tipo de liquidación inválido")
+        query = query.filter(Liquidation.kind == kind)
+    if status: query = query.filter(Liquidation.status == status)
+    if search: query = query.filter(or_(Liquidation.code.contains(search), Liquidation.notes.contains(search)))
+    if starts_on: query = query.filter(Liquidation.ends_on >= starts_on)
+    if ends_on: query = query.filter(Liquidation.starts_on <= ends_on)
+    return page(query, offset, limit)
+
+
+@router.post("/liquidations/preview")
+def preview_liquidation(payload: LiquidationInput, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
+    rows = liquidation_candidates(db, user, payload)
+    items = []
+    for e in rows:
+        commission, deposit = liquidation_amounts(db, e, payload.kind)
+        items.append({**dump(e), "commission": str(commission), "deposit": str(deposit)})
+    return {"items": items, "total": len(items), "sale_total": str(sum((e.price for e in rows), Decimal(0))),
+            "deposit_total": str(sum((Decimal(i["deposit"]) for i in items), Decimal(0)))}
 
 
 @router.post("/liquidations")
 def create_liquidation(payload: LiquidationInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
-    own = profile(db, user)
-    if not admin(user) and (not own or own.kind == "emitter" or payload.kind != "seller"):
-        raise HTTPException(403, "Tu perfil no puede preparar esta liquidación")
-    find(profiles_scope(db, user).filter(Profile.kind == "responsible"), payload.responsible_id)
-    eligible = scope(db, user).filter(Issuance.responsible_id == payload.responsible_id, Issuance.status == "issued",
-        Issuance.payment_status.in_(["collected_by_seller", "paid_to_abissol", "settled"]),
-        Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
-    used = db.query(Item.issuance_id).filter(Item.active_key.like(payload.kind + ":%"))
-    eligible = eligible.filter(~Issuance.id.in_(used.scalar_subquery())).order_by(Issuance.id).with_for_update().all()
+    eligible = liquidation_candidates(db, user, payload, lock=True)
     if not eligible:
-        raise HTTPException(422, "No hay emisiones cobradas disponibles en este período")
-    row = Liquidation(**payload.model_dump(), created_by=user.id, sales_total=0, commission_total=0, deposit_required=0)
+        raise HTTPException(422, "No hay emisiones disponibles en este período")
+    row = Liquidation(**payload.model_dump(exclude={"issuance_ids"}), created_by=user.id, sales_total=0, commission_total=0, deposit_required=0)
     db.add(row)
     db.flush()
+    prefix = {"seller": "LQ", "meta": "LM", "platform": "LP"}[payload.kind]
+    row.code = f"{prefix}-{payload.starts_on:%Y%m%d}-{payload.ends_on:%Y%m%d}-{row.id:06d}"
     for emission in eligible:
-        commission = emission.seller_commission if payload.kind == "seller" else emission.meta_commission if payload.kind == "meta" else emission.platform_fee
-        deposit = emission.price if payload.kind == "seller" and emission.payment_status == "collected_by_seller" else commission if payload.kind != "seller" else Decimal(0)
+        commission, deposit = liquidation_amounts(db, emission, payload.kind)
         db.add(Item(liquidation_id=row.id, issuance_id=emission.id, active_key=f"{payload.kind}:{emission.id}", sale=emission.price, commission=commission, deposit=deposit))
         row.sales_total += emission.price
         row.commission_total += commission
@@ -448,7 +504,7 @@ def create_liquidation(payload: LiquidationInput, request: Request, db: Session 
 def liquidation_detail(ident: int, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations"))):
     row = find(liquidation_scope(db, user), ident)
     result = dump(row)
-    result["items"] = [dump(i) for i in db.query(Item).filter_by(liquidation_id=ident)]
+    result["items"] = [{**dump(i), "code": e.code, "customer": e.customer, "document_number": e.document_number, "plan_name": e.plan_name} for i, e in db.query(Item, Issuance).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == ident)]
     result["vouchers"] = [{k: v for k, v in dump(i).items() if k not in {"storage_key", "digest", "active_digest", "active_reference"}} for i in db.query(Voucher).filter_by(liquidation_id=ident, active=True)]
     result["voucher_total"] = str(db.query(func.coalesce(func.sum(Voucher.amount), 0)).filter_by(liquidation_id=ident, active=True).scalar())
     return result
@@ -678,7 +734,8 @@ def deliver(db, request, user, row, emission):
     # Persistir el intento antes de contactar al proveedor; un corte no genera reintento automático.
     save(db, request, user, row, before)
     url = public_url(request, emission)
-    body = f"ABISSOL: {emission.plan_name}. Certificado {emission.code}. Vigencia {emission.starts_on} al {emission.ends_on}. Verificación: {url}"
+    from ..services.medical_settings import insured_message
+    body = insured_message(db, emission, row.channel, url)
     try:
         if row.channel == "email":
             send_email(db, row.recipient, f"ABISSOL · {emission.code}", body, attachments=[(emission.code + ".pdf", letter_pdf(emission, url), "application/pdf")])
@@ -703,6 +760,8 @@ def create_dispatch(payload: DispatchInput, request: Request, db: Session = Depe
 @router.post("/dispatches/{ident}/retry")
 def retry_dispatch(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-dispatches", "editor"))):
     row = find(db.query(Dispatch).filter(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), ident, True)
+    if row.kind in {"meta_daily_report", "metafin_monthly"}:
+        raise HTTPException(409, "Los reportes META se reenvían desde su pestaña con confirmación explícita")
     if row.legacy_id:
         raise HTTPException(409, 'Comunicación histórica: no se reenvía desde la migración')
     emission = find(scope(db, user).filter(Issuance.status == "issued"), row.issuance_id)

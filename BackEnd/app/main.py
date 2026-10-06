@@ -77,6 +77,8 @@ def health_ready():
 PREFIX = "/abissol/api/v1"
 
 app.include_router(auth.router, prefix=PREFIX, tags=["ABISSOL · Sesiones"])
+from .routes import medical_workspaces
+app.include_router(medical_workspaces.router, prefix=PREFIX, tags=["ABISSOL · Pestañas comerciales"])
 app.include_router(medical.router, prefix=PREFIX, tags=["ABISSOL · Negocio"])
 
 app.include_router(analytics.router, prefix=PREFIX, tags=["ABISSOL · Analítica"])

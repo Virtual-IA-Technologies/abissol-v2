@@ -148,6 +148,12 @@ class MedicalInvoice(Base):
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
 
+class MedicalBusinessSetting(Base):
+    __tablename__ = "medical_business_settings"
+    id = Column(Integer, primary_key=True)
+    values = Column(JSON, nullable=False, default=dict)
+
+
 class MedicalDispatch(Base):
     __tablename__ = "medical_dispatches"
     id = Column(Integer, primary_key=True)
