@@ -1,14 +1,11 @@
 """Atomic numbering, private fiscal configuration, and durable SUNAT outbox."""
 import hashlib
-import io
 import json
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import pymupdf
-import qrcode
 from fastapi import HTTPException
 
 from ..models.fiscal import FiscalJob
@@ -136,7 +133,7 @@ def enqueue_boleta(db, emission):
 
 
 def artifact_path(invoice, kind):
-    extensions = {'XML':'xml','ZIP':'zip','PDF':'pdf','CDR':'zip'}
+    extensions = {'XML':'xml','ZIP':'zip','PDF':'pdf','Ticket':'pdf','CDR':'zip'}
     if kind not in extensions:
         raise sunat.FiscalError('Tipo de archivo inválido.')
     return STORAGE / 'fiscal' / str(invoice.id) / (kind+'.'+extensions[kind])
@@ -151,39 +148,9 @@ def write_artifact(invoice, kind, content):
     return hashlib.sha256(content).hexdigest()
 
 
-def printable_pdf(invoice, digest):
-    config = invoice.details['issuer']
-    document = pymupdf.open()
-    page = document.new_page()
-    page.draw_rect(pymupdf.Rect(0,0,595,125),color=(.05,.35,.25),fill=(.05,.35,.25))
-    page.insert_text((35,42),'ABISSOL',fontsize=23,color=(1,1,1))
-    page.insert_text((35,73),'FACTURA ELECTRONICA' if invoice.document_type=='factura' else 'BOLETA DE VENTA ELECTRONICA',fontsize=13,color=(1,1,1))
-    page.insert_text((35,101),invoice.full_number,fontsize=16,color=(1,1,1))
-    lines = [config['company_name'],'RUC '+config['ruc'],config['address'],'',
-             'Fecha: '+invoice.issue_date.isoformat(),'Titular: '+invoice.customer,'Documento: '+invoice.document_number,'Moneda: PEN / Soles','Cobro al generar este PDF: '+('Confirmado' if invoice.payment_status=='paid' else 'Pendiente'),'']
-    for item in invoice.details['items']:
-        lines.append(f"1 ZZ - {item['description']} - S/ {item['total']}")
-    lines += ['', 'Operaciones inafectas: S/ '+str(sunat.money(invoice.total)), 'IGV: S/ 0.00', 'TOTAL: S/ '+str(sunat.money(invoice.total)), '',
-              sunat.amount_words(invoice.total), 'Representacion impresa del comprobante electronico.', 'Consulta el estado SUNAT y el CDR en la plataforma ABISSOL.']
-    if invoice.document_type=='factura':
-        lines += ['Direccion del adquirente: '+invoice.details.get('customer_address',''), 'Forma de pago: '+invoice.details.get('payment_terms','Contado')]
-        if invoice.details.get('payment_terms')=='Credito':
-            lines += ['Cuota 001: S/ '+str(sunat.money(invoice.total))+' - Vence: '+str(invoice.details.get('due_date',''))]
-    if invoice.details['environment'] != 'production':
-        lines += ['PRUEBA BETA - SIN VALIDEZ TRIBUTARIA']
-    if page.insert_textbox(pymupdf.Rect(35,145,560,605),'\n'.join(lines),fontsize=10,lineheight=1.25)<0:
-        document.close()
-        raise sunat.FiscalError('El contenido del comprobante excede el formato PDF; requiere revisión.')
-    series, number = invoice.full_number.split('-')
-    doc_type = {'DNI':'1','CE':'4','PASSPORT':'7','RUC':'6'}[invoice.details['customer_document_type']]
-    qr = '|'.join([config['ruc'],'01' if invoice.document_type=='factura' else '03',series,number,'0.00',str(sunat.money(invoice.total)),invoice.issue_date.isoformat(),doc_type,invoice.document_number,digest])
-    output = io.BytesIO()
-    qrcode.make(qr).save(output,format='PNG')
-    page.insert_image(pymupdf.Rect(35,620,185,770),stream=output.getvalue())
-    page.insert_textbox(pymupdf.Rect(205,630,560,720),'Resumen de firma:\n'+digest,fontsize=9)
-    result = document.tobytes()
-    document.close()
-    return result
+def printable_pdf(invoice, digest, ticket=False):
+    from .medical_rendering import invoice as render_invoice
+    return render_invoice(invoice,digest,ticket)
 
 
 def log_result(invoice, action, status, message=''):
@@ -208,7 +175,7 @@ def prepare_artifacts(db,invoice,job,raw):
     data=dict(invoice.details)
     data['digest']=digest
     data['files']={kind:write_artifact(invoice,kind,content) for kind,content in (
-        ('XML',xml),('ZIP',sunat.package_xml(name,xml)),('PDF',printable_pdf(invoice,digest)))}
+        ('XML',xml),('ZIP',sunat.package_xml(name,xml)),('PDF',printable_pdf(invoice,digest)),('Ticket',printable_pdf(invoice,digest,True)))}
     invoice.details=data
     invoice.status='generated'
     from .medical_documents import invoice as archive_invoice

@@ -24,6 +24,7 @@ if test "$(mysql -NBe "SELECT COUNT(*) FROM information_schema.tables WHERE tabl
   mysqldump --single-transaction --routines --triggers abissol_v2 | gzip > "$root/backups/abissol_v2-$(date +%Y%m%d-%H%M%S).sql.gz"
 fi
 cd "$release/BackEnd"
+runuser -u abissol -- "$root/.venv/bin/python" scripts/check_pdf_runtime.py
 runuser -u abissol -- "$root/.venv/bin/python" -m alembic upgrade head
 runuser -u abissol -- "$root/.venv/bin/python" - <<'PY'
 from app.database import SessionLocal

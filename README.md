@@ -36,7 +36,9 @@ No se importaron datos, claves, almacenamiento, cuentas ni historial Git de SIAC
 
 ## Ejecución local en Windows
 
-Requisitos: Python 3.14, Node.js 24, npm y MariaDB 10.11 o compatible.
+Requisitos: Python 3.14, Node.js 24, npm, MariaDB 10.11 o compatible y PHP CLI >= 8.2
+con dom, mbstring y GD, más Composer para instalar el motor PDF original.
+Ver [documentos de emisión y correo](docs/ia-agentica/03-MODULOS/DOCUMENTOS_EMISION.md).
 
 1. Desde la raíz, instalar dependencias y generar la configuración local:
 

@@ -35,6 +35,8 @@ def main():
         raise RuntimeError("Primero sincroniza main limpio con origin/main.")
     validate_delivery_files(ROOT)
     commit = status["local_commit"]
+    renderer = ROOT / 'BackEnd/pdf_renderer'
+    run(['composer.bat' if os.name == 'nt' else 'composer', 'install', '--no-dev', '--prefer-dist', '--no-interaction'], cwd=renderer)
     frontend = ROOT / "FrontEnd/frontend-app"
     # Reutilizar solamente un build del mismo árbol, origen y contenido verificado.
     tree = subprocess.check_output(["git", "rev-parse", "HEAD:FrontEnd/frontend-app"], cwd=ROOT, text=True).strip()
@@ -62,6 +64,7 @@ def main():
             run(["git", "archive", "--format=tar", "--output", archive, commit], cwd=ROOT)
             with tarfile.open(archive, "a") as bundle:
                 bundle.add(frontend / "dist", arcname="FrontEnd/frontend-app/dist")
+                bundle.add(renderer / 'vendor', arcname='BackEnd/pdf_renderer/vendor')
             import gzip
             compressed = tmp / "release.tar.gz"
             with archive.open("rb") as source, gzip.open(compressed, "wb", compresslevel=3) as output:

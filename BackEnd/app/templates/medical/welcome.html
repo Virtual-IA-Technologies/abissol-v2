@@ -1,0 +1,367 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Carta de bienvenida</title>
+<style>
+@page {
+    margin: 19mm 27mm 22mm;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    color: #243041;
+    font-family: DejaVu Sans, sans-serif;
+    font-size: 8.5pt;
+    line-height: 1.55;
+}
+
+.header {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 9px;
+}
+
+.header td {
+    width: 50%;
+    vertical-align: middle;
+    padding: 0 0 8px;
+}
+
+.logo-a {
+    display: block;
+    height: 76px;
+    max-width: 300px;
+}
+
+.logo-b {
+    display: inline-block;
+    height: 72px;
+    max-width: 270px;
+}
+
+.header-rule {
+    height: 2px;
+    margin: 0 0 14px;
+    background: #82c341;
+}
+
+h1 {
+    margin: 0 0 8px;
+    text-align: center;
+    color: #0f6b2e;
+    font-size: 12.5pt;
+    line-height: 1.18;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+}
+
+.date {
+    margin-bottom: 14px;
+    text-align: right;
+    color: #64748b;
+    font-size: 8.2pt;
+}
+
+p {
+    margin: 0 0 9px;
+    text-align: justify;
+}
+
+.greeting {
+    margin-bottom: 11px;
+    text-align: left;
+}
+
+.identity {
+    width: 100%;
+    margin: 10px 0 12px;
+    border-collapse: collapse;
+    font-size: 8.3pt;
+}
+
+.identity td {
+    border: 1px solid #d7e8da;
+    padding: 7px 9px;
+    vertical-align: top;
+    background: #ffffff;
+}
+
+.label {
+    display: block;
+    margin-bottom: 2px;
+    color: #64748b;
+    font-size: 6.7pt;
+    font-weight: bold;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.value {
+    color: #111827;
+    font-size: 8.5pt;
+    font-weight: bold;
+}
+
+.section {
+    margin: 12px 0 6px;
+    padding: 5px 9px;
+    color: #0f6b2e;
+    border-left: 3px solid #82c341;
+    border-top: 1px solid #dbeadf;
+    border-bottom: 1px solid #dbeadf;
+    background: #f7fbf8;
+    font-size: 8.8pt;
+    font-weight: bold;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+}
+
+.contribution {
+    margin-bottom: 9px;
+    padding: 7px 10px;
+    border: 1px solid #d7e8da;
+    background: #fbfefb;
+    font-weight: bold;
+}
+
+ol {
+    margin: 6px 0 9px 19px;
+    padding: 0;
+}
+
+li {
+    margin-bottom: 7px;
+    padding-left: 2px;
+    text-align: justify;
+}
+
+.responsibility {
+    font-weight: bold;
+}
+
+.sign {
+    margin-top: 18px;
+    line-height: 1.45;
+}
+
+.sign strong {
+    color: #0f6b2e;
+}
+
+.footer {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px solid #cfe5d4;
+    border-top: 4px solid #82c341;
+    background: #f8fbf8;
+    color: #475569;
+    page-break-inside: avoid;
+}
+
+.footer-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.footer-table td {
+    vertical-align: middle;
+}
+
+.qr-cell {
+    width: 145px;
+    text-align: center;
+}
+
+.qr {
+    width: 126px;
+    height: 126px;
+    padding: 5px;
+    border: 1px solid #bfd8c4;
+    background: #ffffff;
+}
+
+.footer-content {
+    padding-left: 12px;
+}
+
+.footer-title {
+    display: block;
+    margin-bottom: 6px;
+    color: #0f6b2e;
+    font-size: 9.3pt;
+    font-weight: bold;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+
+.footer-text {
+    font-size: 8.1pt;
+    line-height: 1.45;
+}
+
+.verify-url {
+    margin-top: 7px;
+    color: #64748b;
+    font-size: 6.5pt;
+    line-height: 1.28;
+    word-break: break-all;
+}
+</style>
+</head>
+<body>
+
+<table class="header">
+<tr>
+    <td>
+
+            <img class="logo-a" src="${logo}" alt="ABISSOL">
+
+    </td>
+    <td style="text-align:right;">
+
+            <img class="logo-b" src="${partner}" alt="La Primera">
+
+    </td>
+</tr>
+</table>
+
+<div class="header-rule"></div>
+
+<h1>Carta de bienvenida</h1>
+
+<div class="date">${city}, ${letter_date}</div>
+
+<p class="greeting">
+    Estimado(a) <strong>${name}</strong>
+</p>
+
+<table class="identity">
+<tr>
+    <td>
+        <span class="label">Código</span>
+        <span class="value">${code}</span>
+    </td>
+    <td>
+        <span class="label">Documento</span>
+        <span class="value">${document}</span>
+    </td>
+</tr>
+<tr>
+    <td colspan="2">
+        <span class="label">Asociado</span>
+        <span class="value">${name}</span>
+    </td>
+</tr>
+<tr>
+    <td>
+        <span class="label">Inicio de membresía</span>
+        <span class="value">${start}</span>
+    </td>
+    <td>
+        <span class="label">Fin de membresía</span>
+        <span class="value">${end}</span>
+    </td>
+</tr>
+<tr>
+    <td>
+        <span class="label">Teléfono</span>
+        <span class="value">${phone}</span>
+    </td>
+    <td>
+        <span class="label">Correo de contacto</span>
+        <span class="value">${email}</span>
+    </td>
+</tr>
+</table>
+
+<p>
+    Agradecemos su confianza al afiliarse como miembro asociado a ABISSOL.
+    Nuestra finalidad es el desarrollo social, la educación y la asistencia social
+    de nuestros miembros. Le damos la bienvenida a esta organización sin fines de lucro.
+</p>
+
+<div class="section">Aporte abonado</div>
+
+<div class="contribution">
+    Aporte total según comprobante de pago: ${contribution}
+</div>
+
+<p>
+    Como miembro asociado, usted accede a capacitaciones en materia financiera
+    y de administración de riesgos, además de los siguientes:
+</p>
+
+<div class="section">Beneficios</div>
+
+<ol>
+    <li>
+        Orientación telefónica legal, contable y tributaria. Hasta 30 minutos por consulta,
+        con un máximo de 5 consultas al año durante la vigencia de su membresía.
+        No incluye asesoría permanente ni redacción de escritos; se limita a la orientación
+        y consulta telefónica descrita. Para agendar, envíe un mensaje vía WhatsApp
+        al 968 14 00 00.
+    </li>
+
+    <li>
+        <strong>${plan}.</strong>
+
+        ${benefits}
+
+        <span class="responsibility">
+            La prestación de estos servicios es responsabilidad exclusiva de
+            META ASSISTANCE PERÚ S.A.C.; ABISSOL actúa como entidad asociativa
+            que gestiona el acceso de sus miembros al programa.
+        </span>
+    </li>
+</ol>
+
+<p>
+    El programa de servicios para asociados forma parte integrante de la presente afiliación
+    y puede ampliarse mediante comunicación escrita oficial de nuestra entidad.
+    Su uso está sujeto a criterios de razonabilidad y buena fe por parte del titular asociado.
+    En caso se detecten indicios de uso indebido, exceso en la frecuencia de solicitudes
+    respecto de lo previsto para el programa, o que terceros no asociados se beneficien
+    o pretendan beneficiarse de los servicios reservados a los titulares, ABISSOL cursará
+    comunicación previa al asociado requiriendo sus descargos en un plazo razonable.
+    De persistir la situación o de no recibir respuesta, ABISSOL podrá restringir o suspender
+    el acceso a los servicios, sin que ello afecte la vigencia de la afiliación asociativa.
+    Toda notificación se remitirá al teléfono o correo de contacto indicado en el presente
+    documento, canal que el asociado declara y autoriza como válido para tal efecto.
+</p>
+
+<div class="sign">
+    Atentamente,<br>
+    <strong>ABISSOL</strong><br>
+    Área de Afiliación y Atención al Asociado
+</div>
+
+<div class="footer">
+    <table class="footer-table">
+    <tr>
+        <td class="qr-cell">
+
+                <img class="qr" src="${qr}" alt="QR de validación">
+
+        </td>
+        <td class="footer-content">
+            <span class="footer-title">Consulta de membresía</span>
+
+            <div class="footer-text">
+                Escanee el código QR para consultar la membresía registrada en ABISSOL.
+            </div>
+
+
+                <div class="verify-url">${url}</div>
+
+        </td>
+    </tr>
+    </table>
+</div>
+
+</body>
+</html>

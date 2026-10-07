@@ -1,5 +1,13 @@
 # Estado actual
 
+## Documentos y flujo de emisión — 07/10/2026
+
+Plantillas originales Laravel para carta versión 7, A4, ticket y bienvenida HTML,
+con Dompdf aislado. Carta archivada compartida por portal, QR, API externa y correo;
+condicionado adjunto y envío explícito de comprobantes con control de reintentos.
+Migración 0014 agrega vínculo de envío al comprobante sin nuevas tablas.
+Ver [implementación y límites](../03-MODULOS/DOCUMENTOS_EMISION.md).
+
 ## Liquidaciones de vendedores — 07/10/2026
 
 Abonos parciales, identidad bancaria completa, conciliación administrativa,

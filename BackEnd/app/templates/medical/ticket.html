@@ -1,0 +1,80 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { margin: 0; }
+* { box-sizing: border-box; }
+body { width: 72mm; margin: 0 auto; color: #000; font-family: Helvetica, Arial, DejaVu Sans, sans-serif; font-size: 7.4px; line-height: 1.25; font-weight: 400; }
+.ticket { width: 72mm; padding: 7mm 2.6mm 5mm 2.6mm; }
+.center { text-align: center; }
+.right { text-align: right; }
+.bold { font-weight: 800; }
+.issuer-title { font-size: 13.2px; font-weight: 900; text-transform: uppercase; margin-bottom: 4px; }
+.ticket-logo { width: auto; height: auto; max-width: 38mm; max-height: 18mm; margin: 0 auto 3px auto; display: block; object-fit: contain; }
+.logo-fallback { width: 32mm; height: 15mm; margin: 0 auto 3px auto; border: 2px solid #111; color: #111; font-size: 15px; font-weight: 900; line-height: 14mm; border-radius: 5px; }
+.legal { font-size: 6.4px; font-weight: 800; text-transform: uppercase; margin-top: 1px; }
+.address { font-size: 6.1px; font-weight: 700; text-transform: uppercase; margin-top: 1px; }
+.ruc { font-size: 11px; font-weight: 900; margin: 5px 0 2px 0; }
+.doc-title { font-size: 7.7px; font-weight: 900; text-transform: uppercase; margin-top: 3px; }
+.doc-number { font-size: 10.6px; font-weight: 900; margin-top: 2px; }
+.block-line { border-top: 1px solid #111; margin: 6px -2.6mm 5px -2.6mm; }
+.row { margin: 2px 0; text-transform: uppercase; }
+.label { font-weight: 900; }
+.items { width: 100%; border-collapse: collapse; margin-top: 4px; font-size: 6.1px; }
+.items th { border: 1px solid #111; padding: 2px 1px; text-align: center; font-size: 5.6px; font-weight: 900; text-transform: uppercase; }
+.items td { border-left: 1px solid #111; border-right: 1px solid #111; padding: 2px 1.5px; vertical-align: top; }
+.items tbody tr:last-child td { border-bottom: 1px solid #111; }
+.desc { font-weight: 700; }
+.desc .main { font-weight: 800; }
+.desc .feature { display: block; font-size: 5.6px; font-weight: 500; padding-left: 2px; }
+.totals { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 6.7px; font-weight: 800; }
+.totals td { padding: 1.4px 0; }
+.total-final td { font-size: 7.4px; font-weight: 900; padding-top: 3px; }
+.words { margin: 8px 0 9px 0; text-align: center; font-size: 5.8px; font-weight: 800; text-transform: uppercase; }
+.payment { text-align: center; font-size: 6.9px; font-weight: 900; margin: 8px 0 6px 0; text-transform: uppercase; }
+.qr-box { border: 0; padding: 0; margin: 2px auto 0 auto; width: 34mm; min-height: 34mm; text-align: center; page-break-inside: avoid; }
+.qr-img { width: 31mm; height: 31mm; object-fit: contain; display: block; margin: 0 auto; }
+.qr-svg svg { width: 31mm; height: 31mm; display: block; margin: 0 auto; }
+.qr-text { word-break: break-all; font-size: 5px; text-align: left; }
+.hash { margin-top: 5px; text-align: center; font-size: 5.8px; font-weight: 700; word-break: break-all; }
+.footer { margin-top: 5px; font-size: 5.7px; font-weight: 800; text-align: center; page-break-inside: avoid; }
+.footer-url { margin-top: 2px; font-size: 4.8px; font-weight: 600; word-break: break-all; }
+tr, table, div { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+<div class="ticket">
+  <div class="center issuer-title">${issuerTop}</div>
+  <div class="center">${logo}</div>
+  <div class="center legal">${legalName}</div>
+  <div class="center address">${address}</div>
+  <div class="center address">${location}</div>
+  <div class="center ruc">RUC: ${ruc}</div>
+  <div class="center doc-title">${docTitle}</div>
+  <div class="center doc-number">${fullNumber}</div>
+
+  <div class="block-line"></div>
+  <div class="row"><span class="label">FECHA EMISIÓN:</span> ${issueDate}</div>
+  <div class="row"><span class="label">CLIENTE:</span> ${clientName}</div>
+  <div class="row"><span class="label">${clientDoc}</span></div>
+  <div class="row"><span class="label">DIRECCIÓN:</span> ${clientAddress}</div>
+  <div class="row"><span class="label">UBICACIÓN:</span> ${clientLocation}</div>
+
+  <div class="block-line"></div>
+  <table class="items">
+    <thead><tr><th style="width:16%">Código</th><th>Descripción</th><th style="width:13%">Cant.</th><th style="width:18%">Imp.</th></tr></thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <table class="totals">${totals}</table>
+  <div class="words">SON: ${amountWords}</div>
+  <div class="block-line"></div>
+  <div class="payment">FORMA DE PAGO: ${payment_terms}</div>
+  <div class="qr-box">${qr}</div>
+  <div class="hash">${hash}</div>
+  <div class="footer">Representación impresa del Comprobante de Venta Electrónico, esta puede ser consultada en:</div>
+  <div class="footer-url">https://e-consulta.sunat.gob.pe/ol-ti-itconsvalicpe/ConsValiCpe.htm</div>
+</div>
+${beta_notice}${credit_note}</body>
+</html>

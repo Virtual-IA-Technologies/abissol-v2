@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 from typing import Literal
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import Response,FileResponse
 from pydantic import EmailStr, Field, model_validator, ValidationError
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -180,6 +180,9 @@ def detail(ident:int,request:Request,db:Session=Depends(get_db),identity=Depends
 @router.get("/emissions/{ident}/letter")
 def letter(ident:int,request:Request,db:Session=Depends(get_db),identity=Depends(connector)):
     row=issuance(db,identity[0],ident)
+    from ..services.medical_information import letter_file
+    archived=letter_file(db,row)
+    if archived:return FileResponse(archived[0],filename=archived[1],media_type=archived[2],headers={'Cache-Control':'no-store'})
     if row.legacy_id:
         original=m.legacy_data(db,'medical_issuances',row.legacy_id)
         return m.legacy_download(db,original.get('welcome_letter_path'),filename=row.code+'.pdf')
@@ -440,7 +443,7 @@ def send_invoice(ident:int,request:Request,db:Session=Depends(get_db),identity=D
 
 
 @router.get('/billing/{ident}/file/{kind}')
-def invoice_file(ident:int,kind:Literal['PDF','XML','CDR','ZIP'],db:Session=Depends(get_db),identity=Depends(connector)):
+def invoice_file(ident:int,kind:Literal['PDF','Ticket','XML','CDR','ZIP'],db:Session=Depends(get_db),identity=Depends(connector)):
     row=scoped_invoice(db,identity[0],ident)
     if row.legacy_id:
         file_id=(row.details or {}).get('files',{}).get(kind)

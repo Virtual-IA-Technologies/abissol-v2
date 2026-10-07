@@ -1,0 +1,107 @@
+:root {
+      --green: #8cc63f;
+      --green-2: #6fb536;
+      --green-dark: #337b2f;
+      --green-soft: #eef9e7;
+      --ink: #252a2d;
+      --text: #3f464a;
+      --muted: #68737b;
+      --line: rgba(111, 181, 54, .18);
+      --white: #fff;
+      --bg: #f7fbf4;
+      --shadow: 0 24px 70px rgba(22, 34, 22, .10);
+      --shadow-soft: 0 14px 42px rgba(22, 34, 22, .07);
+      --radius: 28px;
+    }
+.assistance-results-list {
+      display: grid;
+      gap: 14px;
+    }
+.assistance-summary {
+      margin-bottom: 6px;
+      color: var(--ink);
+      font-weight: 900;
+    }
+.assistance-result {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255,255,255,.62);
+      border: 1px solid rgba(111,181,54,.22);
+    }
+.assistance-result-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+.assistance-result-title strong {
+      color: var(--ink);
+      font-size: 18px;
+    }
+.assistance-status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 0 10px;
+      border-radius: 999px;
+      color: #1f4d22;
+      background: #eaf7e2;
+      border: 1px solid rgba(111,181,54,.32);
+      font-size: 12px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .03em;
+    }
+.assistance-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+    }
+.assistance-field {
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(111,181,54,.18);
+    }
+.assistance-field span {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+.assistance-field b {
+      color: var(--ink);
+      font-size: 14px;
+    }
+.assistance-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+.assistance-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--green);
+      font-size: 13px;
+      font-weight: 900;
+    }
+.assistance-link.secondary {
+      color: var(--green-dark);
+      background: #fff;
+      border: 1px solid rgba(111,181,54,.34);
+    }
+.assistance-grid { grid-template-columns: 1fr; }

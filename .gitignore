@@ -15,3 +15,5 @@ BackEnd/storage/
 .idea/
 .DS_Store
 Thumbs.db
+
+BackEnd/pdf_renderer/vendor/

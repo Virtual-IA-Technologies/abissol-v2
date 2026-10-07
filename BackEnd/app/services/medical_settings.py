@@ -42,7 +42,7 @@ def business_settings(db):
     return BusinessSettingsInput.model_validate(values).model_dump()
 
 
-def insured_message(db, emission, channel, url):
-    template = business_settings(db)["insured_email_template" if channel == "email" else "insured_whatsapp_template"] or DEFAULT_MESSAGE
+def insured_message(db, emission, channel, url, *, settings=None):
+    template = (settings if settings is not None else business_settings(db))["insured_email_template" if channel == "email" else "insured_whatsapp_template"] or DEFAULT_MESSAGE
     return template.format(nombre=emission.customer, plan=emission.plan_name, certificado=emission.code,
                            inicio=emission.starts_on, fin=emission.ends_on, enlace=url, condicionado=emission.conditions_url or "Consultar con ABISSOL")

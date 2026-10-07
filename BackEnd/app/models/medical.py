@@ -184,6 +184,7 @@ class MedicalDispatch(Base):
     __table_args__ = (Index("ix_medical_dispatch_meta_state", "issuance_id", "kind", "status"),)
     id = Column(Integer, primary_key=True)
     issuance_id = Column(Integer, ForeignKey("medical_issuances.id"), nullable=True, index=True)
+    invoice_id = Column(Integer, ForeignKey('medical_invoices.id'), nullable=True, index=True)
     liquidation_id = Column(Integer, ForeignKey("medical_liquidations.id"))
     legacy_id = Column(Integer, unique=True)
     kind = Column(String(50))

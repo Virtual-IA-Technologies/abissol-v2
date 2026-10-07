@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Bienvenido a ABISSOL</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f8f1;font-family:Arial,Helvetica,sans-serif;color:#172033;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f4f8f1;padding:24px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="640" cellspacing="0" cellpadding="0" style="max-width:640px;width:100%;background:#ffffff;border:1px solid #d9f0df;border-radius:18px;overflow:hidden;">
+          <tr>
+            <td style="padding:18px 24px;border-bottom:4px solid #8cc63f;">
+              <table role="presentation" width="100%">
+                <tr>
+                  <td align="left">
+                    <img src="https://abissol.org/images/abissol-logo.png" alt="ABISSOL" style="height:48px;max-width:210px;display:block;">
+                  </td>
+                  <td align="right">
+                    <img src="https://abissol.org/images/alp-logo.png" alt="La Primera" style="height:48px;max-width:160px;display:block;">
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:26px 28px;">
+              <h1 style="margin:0 0 10px;color:#0f6b2e;font-size:24px;">Bienvenido(a) a ABISSOL</h1>
+              <p style="margin:0 0 18px;line-height:1.65;color:#475569;">Estimado(a) <strong style="color:#0f172a;">${safeName}</strong>, le damos la bienvenida como miembro asociado de ABISSOL.</p>
+              <p style="margin:0 0 18px;line-height:1.65;color:#475569;">Su membresía ha sido registrada correctamente. Ponemos a su disposición su carta individual de bienvenida, el condicionado oficial del programa y el enlace de consulta de su membresía.</p>
+
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #d9f0df;border-radius:14px;overflow:hidden;margin:18px 0;">
+                <tr>
+                  <td colspan="2" style="background:#e9f8ed;padding:12px 16px;color:#0f6b2e;font-weight:800;">Resumen de membresía</td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding:12px 16px;border-top:1px solid #e5f4e8;"><span style="display:block;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Programa</span><strong>${safePlan}</strong></td>
+                </tr>
+                <tr>
+                  <td style="padding:12px 16px;border-top:1px solid #e5f4e8;width:50%;"><span style="display:block;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Inicio de membresía</span><strong>${startsAt}</strong></td>
+                  <td style="padding:12px 16px;border-top:1px solid #e5f4e8;width:50%;"><span style="display:block;color:#64748b;font-size:11px;font-weight:700;text-transform:uppercase;">Fin de membresía</span><strong>${endsAt}</strong></td>
+                </tr>
+              </table>
+
+              <div style="margin:22px 0;">${welcomeLetterButton}${conditionedButton}${verificationButton}</div>
+              ${welcome_direct}
+              ${conditions_direct}
+
+              <p style="margin:18px 0 0;line-height:1.6;color:#64748b;font-size:13px;">El condicionado contiene los beneficios, alcances, exclusiones, limitaciones y procedimientos aplicables al programa.</p>
+              <p style="margin:14px 0 0;line-height:1.6;color:#172033;font-size:13px;"><strong>La prestación de los servicios asistenciales es responsabilidad exclusiva de META ASSISTANCE PERÚ S.A.C.; ABISSOL actúa como entidad asociativa que gestiona el acceso de sus miembros al programa.</strong></p>
+              <p style="margin:20px 0 0;line-height:1.6;color:#172033;">Atentamente,<br><strong>ABISSOL</strong><br>Área de Afiliación y Atención al Asociado</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

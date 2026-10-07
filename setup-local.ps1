@@ -13,6 +13,11 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Falló la generación de configuración.' }
     }
 } finally { Pop-Location }
+Push-Location (Join-Path $PSScriptRoot 'BackEnd/pdf_renderer')
+try {
+    & composer.bat install --no-dev --prefer-dist --no-interaction
+    if ($LASTEXITCODE -ne 0) { throw 'El PDF original requiere PHP 8.2+ y Composer.' }
+} finally { Pop-Location }
 Push-Location (Join-Path $PSScriptRoot 'FrontEnd/frontend-app')
 try {
     & npm.cmd ci --no-audit --no-fund

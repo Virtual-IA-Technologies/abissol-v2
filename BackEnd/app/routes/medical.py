@@ -1,7 +1,6 @@
 """Operación comercial ABISSOL con permisos de menú y alcance por registro."""
 import hashlib
 import html
-import io
 import json
 import re
 import secrets
@@ -11,7 +10,6 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pymupdf as fitz
-import qrcode
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, Response, HTMLResponse, JSONResponse
@@ -363,36 +361,17 @@ def public_url(request, row):
 
 
 def letter_pdf(row, url):
-    document = fitz.open()
-    sheet = document.new_page()
-    sheet.draw_rect(fitz.Rect(0, 0, 595, 140), color=(.12, .33, .21), fill=(.12, .33, .21))
-    sheet.insert_text((45, 65), "ABISSOL", fontsize=28, color=(1, 1, 1))
-    sheet.insert_text((45, 103), "Asociacion de Bienestar, Inclusion, Salud y Solidaridad", fontsize=11, color=(1, 1, 1))
-    lines = ["CARTA DE BIENVENIDA", "", f"Certificado: {row.code}", f"Plan: {row.plan_name}",
-             f"Titular: {row.customer}", f"Documento: {row.document_type} {row.document_number}",
-             f"Vigencia: {row.starts_on} al {row.ends_on}", f"Importe: S/ {row.price}",
-             f"Estado: {'Anulado' if row.status == 'cancelled' else 'Emitido'}", "",
-             "Consulta la vigencia y el estado mediante el codigo QR.",
-             "Los servicios se sujetan al condicionado del plan contratado."]
-    sheet.insert_textbox(fitz.Rect(45, 175, 550, 550), "\n".join(lines), fontsize=12, lineheight=1.7)
-    buf = io.BytesIO()
-    qrcode.make(url).save(buf, format="PNG")
-    sheet.insert_image(fitz.Rect(45, 585, 195, 735), stream=buf.getvalue())
-    if row.conditions_url:
-        sheet.insert_text((225, 650), "Consultar condiciones del plan", fontsize=11, color=(.12, .33, .21))
-        sheet.insert_link({"kind": fitz.LINK_URI, "from": fitz.Rect(220, 630, 520, 665), "uri": row.conditions_url})
-    result = document.tobytes()
-    document.close()
-    return result
+    from ..services.medical_rendering import welcome
+    return welcome(row,url)
 
 
 @router.get("/emissions/{ident}/letter")
 def letter(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-emissions"))):
     row = find(scope(db, user), ident)
-    if row.legacy_id:
-        original = legacy_data(db, 'medical_issuances', row.legacy_id)
-        return legacy_download(db, original.get('welcome_letter_path'), filename=row.code + '.pdf')
-    return Response(letter_pdf(row, public_url(request, row)), media_type="application/pdf", headers={"Content-Disposition": f'attachment; filename="{row.code}.pdf"', "Cache-Control": "no-store"})
+    from ..services.medical_information import letter_file
+    archived=letter_file(db,row)
+    if archived:return FileResponse(archived[0],filename=archived[1],media_type=archived[2],headers={'Cache-Control':'no-store'})
+    return Response(letter_pdf(row,public_url(request,row)),media_type='application/pdf',headers={'Cache-Control':'no-store'})
 
 
 @router.get("/validate/{token}")
@@ -405,8 +384,8 @@ def validate(token: str, request: Request, db: Session = Depends(get_db)):
     today = datetime.now(ZoneInfo("America/Lima")).date()
     valid = row.status == "issued" and row.starts_on <= today <= row.ends_on
     if "text/html" in request.headers.get("accept", ""):
-        status = "Anulado" if row.status == "cancelled" else "Vigente" if valid else "Vigencia por iniciar" if today < row.starts_on else "Vencido"
-        return HTMLResponse(f'''<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Verificación ABISSOL</title><style>body{{margin:0;background:#102b20;color:#18362a;font:16px system-ui;display:grid;place-items:center;min-height:100vh}}main{{background:#fff;border-radius:24px;padding:32px;margin:16px;max-width:440px}}h1{{color:#287343}}dt{{color:#526b60;margin-top:18px}}dd{{margin:4px 0;font-weight:600}}small{{display:block;margin-top:24px;color:#526b60}}</style><main><h1>ABISSOL</h1><p>Verificación de certificado</p><dl><dt>Certificado</dt><dd>{html.escape(row.code)}</dd><dt>Plan</dt><dd>{html.escape(row.plan_name)}</dd><dt>Vigencia</dt><dd>{row.starts_on} al {row.ends_on}</dd><dt>Estado</dt><dd>{status}</dd></dl><small>Verificación pública sin datos personales del titular.</small></main></html>''', headers={"Cache-Control": "no-store", "X-Robots-Tag": "noindex, nofollow"})
+        from .medical_public import validation_page
+        return validation_page(db,row)
     return JSONResponse(jsonable_encoder({"organization": "ABISSOL", "certificate": row.code, "plan": row.plan_name,
             "starts_on": row.starts_on, "ends_on": row.ends_on, "status": row.status,
             "valid_now": valid}), headers={"Cache-Control": "no-store"})
@@ -726,8 +705,8 @@ def dispatches(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200
     if not admin(user):
         query = query.filter(or_(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery()), Dispatch.liquidation_id.in_(liquidation_scope(db, user).with_entities(Liquidation.id).scalar_subquery())))
     total = query.count()
-    rows = query.add_columns(Issuance.code, Liquidation.code).outerjoin(Issuance, Issuance.id == Dispatch.issuance_id).outerjoin(Liquidation, Liquidation.id == Dispatch.liquidation_id).order_by(Dispatch.id.desc()).offset(offset).limit(limit).all()
-    return {"items": [{**dump(row), "issuance_code": code, "liquidation_code": liquidation_code} for row, code, liquidation_code in rows], "total": total}
+    rows = query.add_columns(Issuance.code, Liquidation.code, Invoice.full_number).outerjoin(Issuance, Issuance.id == Dispatch.issuance_id).outerjoin(Liquidation, Liquidation.id == Dispatch.liquidation_id).outerjoin(Invoice, Invoice.id == Dispatch.invoice_id).order_by(Dispatch.id.desc()).offset(offset).limit(limit).all()
+    return {"items": [{**dump(row), "issuance_code": code, "liquidation_code": liquidation_code, "invoice_number": invoice_number} for row, code, liquidation_code, invoice_number in rows], "total": total}
 
 
 def deliver(db, request, user, row, emission):
@@ -738,16 +717,19 @@ def deliver(db, request, user, row, emission):
     save(db, request, user, row, before)
     url = public_url(request, emission)
     from ..services.medical_settings import insured_message
-    body = insured_message(db, emission, row.channel, url)
     try:
         if row.channel == "email":
-            if emission.legacy_id:
-                original = legacy_data(db, 'medical_issuances', emission.legacy_id)
-                attachment = Path(legacy_download(db, original.get('welcome_letter_path')).path).read_bytes()
-            else:
-                attachment = letter_pdf(emission, url)
-            send_email(db, row.recipient, f"ABISSOL · {emission.code}", body, attachments=[(emission.code + ".pdf", attachment, "application/pdf")])
+            from ..services.medical_information import letter_file,conditions_file,welcome_message
+            archived=letter_file(db,emission)
+            attachment=archived[0].read_bytes() if archived else letter_pdf(emission,url)
+            attachments=[('carta-bienvenida-abissol.pdf',attachment,'application/pdf')]
+            conditioned=conditions_file(db,emission)
+            if conditioned:attachments.append((conditioned[1],conditioned[0].read_bytes(),conditioned[2]))
+            body,html_body=welcome_message(db,emission,url,condition_available=bool(conditioned))
+            send_email(db,row.recipient,f'Bienvenido a ABISSOL · {emission.plan_name}',body,html=html_body,attachments=attachments)
+
         else:
+            body = insured_message(db, emission, row.channel, url)
             send_whatsapp(db, row.recipient, body)
         row.status = "sent"
     except Exception:
@@ -768,7 +750,7 @@ def create_dispatch(payload: DispatchInput, request: Request, db: Session = Depe
 @router.post("/dispatches/{ident}/retry")
 def retry_dispatch(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-dispatches", "editor"))):
     row = find(db.query(Dispatch).filter(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), ident, True)
-    if row.kind in {"meta_daily_report", "metafin_monthly"}:
+    if row.kind in {"meta_daily_report", "metafin_monthly", "invoice_client"}:
         raise HTTPException(409, "Los reportes META se reenvían desde su pestaña con confirmación explícita")
     if row.legacy_id:
         raise HTTPException(409, 'Comunicación histórica: no se reenvía desde la migración')

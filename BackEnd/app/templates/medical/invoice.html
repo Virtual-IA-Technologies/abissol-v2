@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+@page { margin: 18px 24px 24px 24px; }
+* { box-sizing: border-box; }
+table, td, th, div, span { font-family: Helvetica, Arial, DejaVu Sans, sans-serif; }
+body { color: #263238; font-size: 9.8px; font-weight: 400; margin: 0; }
+.wrapper { width: 100%; }
+.header { display: table; width: 100%; margin-bottom: 12px; }
+.header-left, .header-right { display: table-cell; vertical-align: middle; }
+.header-left { width: 70%; }
+.header-right { width: 30%; text-align: right; }
+.logo-row { display: table; width: 100%; }
+.logo-box, .company-box { display: table-cell; vertical-align: middle; }
+.logo-box { width: 155px; text-align: center; }
+.company-box { padding-left: 14px; padding-right: 12px; text-align: center; }
+.a4-logo { width: 145px; max-width: 145px; max-height: 112px; object-fit: contain; display: block; margin: 0 auto; }
+.logo-fallback { width: 136px; height: 86px; border: 1.5px solid #708c5c; color: #4f6f3b; font-size: 28px; font-weight: 800; text-align: center; line-height: 82px; border-radius: 10px; }
+.company-name { font-size: 13px; line-height: 1.22; font-weight: 800; color: #4f6b45; text-transform: uppercase; }
+.company-address { margin-top: 8px; color: #4b5563; line-height: 1.28; text-transform: uppercase; font-size: 8.6px; }
+.company-contact { margin-top: 5px; color: #374151; line-height: 1.25; font-size: 8.7px; }
+.doc-box { display: inline-block; width: 200px; border: 1.4px solid #8fa684; border-radius: 12px; padding: 18px 10px 10px 10px; text-align: center; min-height: 98px; background: #ffffff; }
+.doc-ruc { font-size: 11.4px; line-height: 1.15; color: #374151; font-weight: 800; margin-bottom: 9px; }
+.doc-title { font-size: 12px; line-height: 1.15; font-weight: 800; color: #ffffff; background: #8ca97c; border-radius: 5px; padding: 6px 4px; margin: 0 0 8px 0; }
+.doc-number { font-size: 12px; color: #294c24; font-weight: 800; }
+.info-card { border: 1px solid #7d9870; border-radius: 11px; padding: 7px 10px; overflow: hidden; margin-bottom: 10px; background: #ffffff; }
+.info-table { width: 100%; border-collapse: collapse; }
+.info-table td { border: 0; padding: 5px 7px; vertical-align: top; font-size: 10px; }
+.label { font-weight: 800; color: #31542b; width: 88px; white-space: nowrap; }
+.right-label { font-weight: 800; color: #31542b; width: 58px; white-space: nowrap; text-align: right; }
+.value { color: #263238; }
+.value-nowrap { color: #263238; white-space: nowrap; }
+.meta-table { width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid #cfd8cc; border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.meta-table th { background: #f4f7f2; color: #4f6b45; font-weight: 800; border-right: 1px solid #cfd8cc; border-bottom: 1px solid #cfd8cc; padding: 7px 5px; text-align: center; font-size: 9.4px; text-transform: uppercase; }
+.meta-table td { border-right: 1px solid #d8ded5; padding: 7px 5px; text-align: center; color: #374151; font-size: 10px; }
+.meta-table th:last-child, .meta-table td:last-child { border-right: 0; }
+.items { width: 100%; border-collapse: collapse; margin-top: 0; }
+.items th { background: #91aa82; color: #ffffff; font-weight: 800; border: 1px solid #ffffff; padding: 7px 5px; font-size: 9.2px; text-transform: uppercase; }
+.items td { border: 1px solid #d4dcd0; padding: 7px 6px; vertical-align: middle; font-size: 9.8px; }
+.items .center { text-align: center; }
+.items .right { text-align: right; white-space: nowrap; }
+.item-description { line-height: 1.35; white-space: pre-line; }
+.item-description .main { font-weight: 800; color: #1f2937; }
+.item-description .feature { color: #4b5563; display: block; padding-left: 6px; }
+.main-area { display: table; width: 100%; margin-top: 14px; }
+.obs-area { display: table-cell; width: 60%; vertical-align: top; padding-right: 18px; min-height: 180px; }
+.total-area { display: table-cell; width: 40%; vertical-align: top; }
+.obs-title { font-weight: 800; color: #4f6b45; margin-bottom: 8px; text-transform: uppercase; }
+.obs-line { display: inline-block; width: 68%; border-top: 1px solid #d2d8cf; margin-left: 10px; vertical-align: middle; }
+.total-table { width: 100%; border-collapse: separate; border-spacing: 0 5px; }
+.total-table td { padding: 6px 9px; font-size: 10px; }
+.total-label { background: #eef1ed; color: #4f6b45; text-align: center; font-weight: 800; border-radius: 8px 0 0 8px; }
+.total-value { border: 1px solid #d7ddd4; border-left: 0; background: #ffffff; text-align: right; border-radius: 0 8px 8px 0; }
+.total-final .total-label { background: #8daa7d; color: #ffffff; font-size: 11px; }
+.total-final .total-value { color: #294c24; font-weight: 900; font-size: 12px; border-color: #8daa7d; background: #f6faf4; }
+.words { border: 1px solid #9bb08f; border-radius: 7px; margin-top: 13px; padding: 8px 10px; font-size: 9.4px; text-transform: uppercase; color: #31542b; }
+.footer { position: fixed; left: 24px; right: 24px; bottom: 14px; font-size: 8.2px; color: #6b7280; }
+.footer-table { width: 100%; border-collapse: collapse; }
+.footer-table td { border: 0; vertical-align: bottom; }
+.qr-box { width: 116px; min-height: 116px; border: 0; padding: 0; text-align: center; }
+.qr-img { width: 106px; height: 106px; object-fit: contain; display: block; margin: 0 auto; }
+.qr-svg svg { width: 106px; height: 106px; display: block; margin: 0 auto; }
+.qr-text { word-break: break-all; font-size: 5px; color: #111827; text-align: left; }
+.footer-center { text-align: center; line-height: 1.45; }
+.footer-right { text-align: right; }
+.hash { word-break: break-all; }
+tr, table, div { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <div class="header">
+    <div class="header-left">
+      <div class="logo-row">
+        <div class="logo-box">${logo}</div>
+        <div class="company-box">
+          <div class="company-name">${company}</div>
+          <div class="company-address">${address}</div>
+          <div class="company-contact">${contact}</div>
+        </div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="doc-box">
+        <div class="doc-ruc">RUC: ${ruc}</div>
+        <div class="doc-title">${docTitle}</div>
+        <div class="doc-number">Nro. ${fullNumber}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="info-card">
+    <table class="info-table">
+      <tr>
+        <td class="label">Cliente:</td><td class="value" colspan="3">${clientName}</td>
+        <td class="right-label">Moneda:</td><td class="value-nowrap">${currency}</td>
+        <td class="right-label">IGV:</td><td class="value-nowrap">${tax_percent}%</td>
+      </tr>
+      <tr><td class="label">RUC/DNI:</td><td class="value" colspan="7">${clientDoc}</td></tr>
+      <tr><td class="label">Dirección:</td><td class="value" colspan="7">${clientAddress}</td></tr>
+      <tr><td class="label">Ciudad:</td><td class="value" colspan="7">${clientLocation}</td></tr>
+    </table>
+  </div>
+
+  <table class="meta-table">
+    <tr>
+      <th>Fecha de Emisión</th><th>Forma de Pago</th><th>Orden de Compra</th><th>Fecha de Vencimiento</th>
+    </tr>
+    <tr>
+      <td>${issueDate}</td><td>${payment_terms}</td><td>${reference}</td><td>${dueDate}</td>
+    </tr>
+  </table>
+
+  <table class="items">
+    <thead>
+      <tr><th style="width:8%">Código</th><th style="width:8%">Cant.</th><th style="width:8%">Unid.</th><th>Descripción</th><th style="width:12%">V. Unit.</th><th style="width:10%">IGV</th><th style="width:12%">V. Venta</th></tr>
+    </thead>
+    <tbody>${rows}</tbody>
+  </table>
+
+  <div class="main-area">
+    <div class="obs-area">
+      <div class="obs-title">OBSERVACIONES <span class="obs-line"></span></div>
+      <div>${notes}</div>
+    </div>
+    <div class="total-area">
+      <table class="total-table">${totals}</table>
+    </div>
+  </div>
+
+  <div class="words">SON: ${amountWords}</div>
+</div>
+
+<div class="footer">
+  <table class="footer-table">
+    <tr>
+      <td style="width:20%"><div class="qr-box">${qr}</div></td>
+      <td class="footer-center" style="width:60%">
+        <div class="hash">Hash: ${hash}</div>
+        <div>Representación impresa del comprobante electrónico. Consulte o valide su CPE en SUNAT:</div>
+        <div>https://e-consulta.sunat.gob.pe/ol-ti-itconsvalicpe/ConsValiCpe.htm</div>
+        <div>${tradeName}</div>
+      </td>
+      <td class="footer-right" style="width:20%">1 de 1</td>
+    </tr>
+  </table>
+</div>
+${beta_notice}${credit_note}</body>
+</html>
