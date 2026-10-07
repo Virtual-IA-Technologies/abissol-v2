@@ -11,6 +11,10 @@ from . import medical_billing as fiscal
 
 
 def create_sale(db, payload, emitter, actor_id):
+    from .medical_testing import batch
+    test_batch=batch(db,lock=True)
+    if db.info.get('medical_test_only') and not test_batch:
+        raise HTTPException(409,'El modo de pruebas está cerrado')
     today = datetime.now(ZoneInfo("America/Lima")).date()
     if payload.starts_on <= today:
         raise HTTPException(422,"La vigencia debe comenzar desde mañana (hora de Lima)")
@@ -21,7 +25,7 @@ def create_sale(db, payload, emitter, actor_id):
         active=True,kind="responsible",source_id=emitter.source_id).first()
     if not responsible:
         raise HTTPException(422,"El emisor no tiene un responsable activo en su origen")
-    digest = hashlib.sha256(f"{payload.document_type}:{payload.document_number.upper()}".encode()).hexdigest()
+    digest = hashlib.sha256(((test_batch+':' if test_batch else '')+f"{payload.document_type}:{payload.document_number.upper()}").encode()).hexdigest()
     if not db.get(MedicalCoverageLock,digest):
         try:
             with db.begin_nested():
@@ -35,6 +39,7 @@ def create_sale(db, payload, emitter, actor_id):
         raise HTTPException(422,"Plan no disponible")
     ends_on = payload.starts_on + timedelta(days=plan.validity_days-1)
     overlap = db.query(MedicalIssuance.id).filter(MedicalIssuance.document_type==payload.document_type,
+        MedicalIssuance.test_batch==test_batch,
         MedicalIssuance.document_number==payload.document_number,MedicalIssuance.status!="cancelled",
         MedicalIssuance.starts_on<=ends_on,MedicalIssuance.ends_on>=payload.starts_on).with_for_update().first()
     if overlap:
@@ -46,7 +51,7 @@ def create_sale(db, payload, emitter, actor_id):
     commission = commission.quantize(Decimal('.01'),rounding=ROUND_HALF_UP)
     if commission < 0 or commission + plan.provider_cost + plan.platform_fee > plan.price:
         raise HTTPException(422,"La comisión configurada supera el margen del plan")
-    plan.counter += 1
+    if not test_batch:plan.counter += 1
     values = payload.model_dump()
     values.pop('billing',None)
     billing_preference=payload.billing.model_dump(mode='json') if payload.billing else None
@@ -54,7 +59,7 @@ def create_sale(db, payload, emitter, actor_id):
         if not payload.billing.due_date or payload.billing.due_date<=today:
             raise HTTPException(422,'La factura a crédito requiere una fecha de vencimiento posterior a hoy')
     values['billing_preference']=billing_preference
-    values.update(code=f"{plan.prefix}-{plan.counter:06d}",token=secrets.token_urlsafe(32),
+    values.update(code='PRUEBA-'+secrets.token_hex(10) if test_batch else f"{plan.prefix}-{plan.counter:06d}",token=secrets.token_urlsafe(32),test_batch=test_batch,
         plan_name=plan.name,source_id=source.id,responsible_id=responsible.id,sale_date=today,ends_on=ends_on,
         price=plan.price,provider_cost=plan.provider_cost,seller_commission=commission,platform_fee=plan.platform_fee,
         meta_commission=(plan.provider_cost*plan.meta_percent/100).quantize(Decimal('.01'),rounding=ROUND_HALF_UP),

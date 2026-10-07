@@ -16,6 +16,7 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--source',required=True)
     parser.add_argument('--output',type=Path,required=True)
+    parser.add_argument('--test-only',action='store_true')
     args=parser.parse_args()
     if args.output.exists():
         raise SystemExit('El archivo de salida ya existe; no se sobrescribe una credencial.')
@@ -31,7 +32,7 @@ def main():
         # Do not reuse an account that acquired platform privileges.
         if actor.active_roles() or actor.deleted_at or not actor.is_active:
             raise SystemExit('La cuenta técnica tiene permisos o estado no admitidos.')
-        db.add(MedicalIntegrationCredential(source_id=source.id,actor_id=actor.id,token_hash=hashlib.sha256(token.encode()).hexdigest(),active=True))
+        db.add(MedicalIntegrationCredential(source_id=source.id,actor_id=actor.id,token_hash=hashlib.sha256(token.encode()).hexdigest(),active=True,test_only=args.test_only))
         fd=os.open(args.output,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
         try:
             with os.fdopen(fd,'w') as handle: handle.write(token)

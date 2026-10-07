@@ -31,6 +31,9 @@ def send_invoice(ident:int,payload:InvoiceDelivery,request:Request,db:Session=De
     if sum(len(content) for _,content,_ in attachments)>20*1024*1024:raise HTTPException(413,'Los adjuntos superan 20 MB')
     attempt=m.Dispatch(invoice_id=ident,issuance_id=row.issuance_id,kind='invoice_client',channel='email',recipient=str(payload.recipient),status='sending',attempts=1,created_by=user.id)
     m.save(db,request,user,attempt)
+    if (row.details or {}).get('test_batch'):
+        attempt.status='simulated';attempt.error='PRUEBA: adjuntos preparados; no se envió correo.'
+        return m.save(db,request,user,attempt,{'status':'sending'})
     try:
         m.send_email(db,attempt.recipient,'Comprobante electrónico '+row.full_number,'Adjuntamos su comprobante electrónico '+row.full_number,attachments=attachments)
         attempt.status='sent'

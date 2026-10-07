@@ -53,7 +53,7 @@ def meta_state(db, status):
 
 
 def meta_query(db, user, status="pending", search="", starts_on=None, ends_on=None):
-    query = m.scope(db, user).filter(m.Issuance.status == "issued")
+    query = m.scope(db, user).filter(m.Issuance.test_batch.is_(None), m.Issuance.status == "issued")
     if status != "all":
         query = query.filter(meta_state(db, status))
     if search:
@@ -90,7 +90,7 @@ class MetaSelection(Payload):
 
 
 def selected_emissions(db, user, ids, lock=False):
-    query = m.scope(db, user).filter(m.Issuance.status == "issued", m.Issuance.id.in_(ids)).order_by(m.Issuance.id)
+    query = m.scope(db, user).filter(m.Issuance.test_batch.is_(None), m.Issuance.status == "issued", m.Issuance.id.in_(ids)).order_by(m.Issuance.id)
     rows = (query.with_for_update() if lock else query).all()
     if len(rows) != len(set(ids)):
         raise HTTPException(409, "La selección cambió o contiene emisiones no disponibles")

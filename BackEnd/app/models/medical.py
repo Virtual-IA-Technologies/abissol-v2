@@ -51,6 +51,7 @@ class MedicalIssuance(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(40), unique=True, nullable=False)
     token = Column(String(64), unique=True, nullable=False)
+    test_batch = Column(String(64), nullable=True, index=True)
     plan_id = Column(Integer, ForeignKey("medical_plans.id"), nullable=False)
     plan_name = Column(String(120), nullable=False)
     source_id = Column(Integer, ForeignKey("medical_sources.id"), nullable=False, index=True)
@@ -94,6 +95,7 @@ class MedicalIntegrationCredential(Base):
     actor_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     token_hash = Column(String(64), unique=True, nullable=False)
     active = Column(Boolean, nullable=False, default=True)
+    test_only = Column(Boolean, nullable=False, default=False, server_default='0')
     created_at = Column(DateTime, nullable=False, default=utc_now)
 
 

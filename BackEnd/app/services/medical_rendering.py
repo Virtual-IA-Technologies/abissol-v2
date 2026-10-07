@@ -46,7 +46,9 @@ def welcome(row,url):
         'name':row.customer,'document':row.document_number,'code':row.code,'start':row.starts_on.strftime('%d/%m/%Y'),'end':row.ends_on.strftime('%d/%m/%Y'),
         'phone':row.phone,'email':row.email,'contribution':'S/ '+str(sunat.money(row.price)),'plan':row.plan_name.upper(),'url':url}.items()}
     context.update(logo='abissol-logo.png',partner='alp-logo.png',qr='qr.png',benefits=template('benefits-'+('plus' if 'plus' in row.plan_name.lower() else 'essential')+'.html'))
-    return render(Template(template('welcome.html')).substitute(context),url,'welcome')
+    html=Template(template('welcome.html')).substitute(context)
+    if getattr(row,'test_batch',None):html=html.replace('<body>','<body><div style="color:#b91c1c;font-weight:bold;text-align:center">PRUEBA LOCAL — NO ACREDITA COBERTURA REAL</div>')
+    return render(html,url,'welcome')
 
 def invoice(row,digest,ticket=False):
     data=row.details;issuer=data['issuer'];total=sunat.money(row.total)
@@ -75,5 +77,6 @@ def invoice(row,digest,ticket=False):
     labels=['OPERACIÓN GRAVADA:','OPERACIÓN INAFECTA:','OPERACIÓN EXONERADA:','SUB TOTAL:','IGV (0.00%):','TOTAL A PAGAR:'] if ticket else ['OP. GRAVADAS','OP. INAFECTAS','OP. EXONERADAS','SUB TOTAL','IGV','TOTAL']
     context['totals']=''.join('<tr'+(' class="total-final"' if i==5 else '')+'><td class="total-label">'+label+'</td><td class="total-value right">S/ '+str(sunat.money(value))+'</td></tr>' for i,(label,value) in enumerate(zip(labels,[0,total,0,total,0,total])))
     context['beta_notice']='<p style="color:#b91c1c;font-weight:bold">PRUEBA BETA - SIN VALIDEZ TRIBUTARIA</p>' if data['environment']!='production' else ''
+    if data.get('test_batch'):context['beta_notice']='<p style="color:#b91c1c;font-weight:bold">PRUEBA LOCAL - SIN VALIDEZ TRIBUTARIA - NO ENVIADO A SUNAT</p>'
     context['credit_note']=f'<p>Cuota 001: S/ {total} · Vence: {escape(str(data.get("due_date") or ""))}</p>' if data.get('payment_terms')=='Credito' else ''
     return render(Template(template('ticket.html' if ticket else 'invoice.html')).substitute(context),qr,'ticket' if ticket else 'invoice')

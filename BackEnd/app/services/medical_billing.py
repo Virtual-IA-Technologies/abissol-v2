@@ -78,6 +78,7 @@ def public_configuration(db):
     except sunat.FiscalError as exc:
         problem = str(exc)
     return {**{k:raw.get(k) for k in PUBLIC_FIELDS}, 'imported':True,'enabled':bool(raw.get('enabled_in_v2')),
+            'test_batch':raw.get('test_batch'),
             'ready':ready,'problem':problem,'certificate_expires_at':expires,
             'v2_series':raw.get('v2_series',''), 'v2_counter':raw.get('v2_counter',0),
             'v2_invoice_series':raw.get('v2_invoice_series',''),'v2_invoice_counter':raw.get('v2_invoice_counter',0),
@@ -89,6 +90,9 @@ def public_configuration(db):
 
 def enqueue_boleta(db, emission):
     """Queue the requested invoice, defaulting to boleta, inside the sale transaction."""
+    if emission.test_batch:
+        from .medical_testing import preview
+        return preview(db,emission)
     row, raw = configuration(db, lock=True)
     if not raw.get('enabled_in_v2') or emission.legacy_id:
         return None
@@ -160,6 +164,8 @@ def log_result(invoice, action, status, message=''):
 
 
 def prepare_artifacts(db,invoice,job,raw):
+    if (invoice.details or {}).get('test_batch'):
+        raise sunat.FiscalError('Un comprobante de prueba nunca se firma ni se convierte en real.')
     config={**raw,**invoice.details['issuer'],'environment':job.environment}
     config['v2_invoice_series' if invoice.document_type=='factura' else 'v2_series']=job.series
     config['document_type_code']='01' if invoice.document_type=='factura' else '03'
@@ -188,9 +194,11 @@ def process_job(db, ident):
     if not job or job.state in {'accepted','rejected','blocked'} or job.next_attempt_at > utc_now():
         return
     _, raw = configuration(db)
-    if not raw.get('enabled_in_v2'):
+    if not raw.get('enabled_in_v2') or raw.get('test_batch'):
         return
     invoice = db.get(MedicalInvoice,job.invoice_id)
+    if (invoice.details or {}).get('test_batch'):
+        return
     # Snapshot public issuer/environment; current private credentials stay private.
     config = {**raw,**invoice.details['issuer'],'environment':job.environment}
     config['v2_invoice_series' if invoice.document_type=='factura' else 'v2_series'] = job.series

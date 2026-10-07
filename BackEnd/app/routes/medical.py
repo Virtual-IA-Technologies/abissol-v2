@@ -143,11 +143,12 @@ def lookups(section: str, db: Session = Depends(get_db), identity=Depends(get_cu
         if section != "network" or not admin(user):
             query = query.filter(Usuario.id.in_({p.user_id for p in people if p.user_id}))
         users = query.all()
-    return {"plans": [dump(p) for p in db.query(Plan).order_by(Plan.name)] if section == "emissions" else [],
+    fiscal_config=fiscal.configuration(db)[1]
+    return {"test_batch":fiscal_config.get("test_batch"),"plans": [dump(p) for p in db.query(Plan).order_by(Plan.name)] if section == "emissions" else [],
             "sources": [dump(source) for source in sources], "profiles": [dump(p) for p in people],
             "users": [{"id": u.id, "name": f"{u.nombre} {u.apellido or ''}".strip(), "is_active": u.is_active, "roles": [r.nombre for r in u.active_roles()]} for u in users],
             "emissions": [], "global_access": admin(user),
-            "fiscal_enabled": bool(fiscal.configuration(db)[1].get('enabled_in_v2')) if section == "billing" else False,
+            "fiscal_enabled": bool(fiscal_config.get('enabled_in_v2')) if section == "billing" else False,
             "can_configure_communications": fiscal.programmer(user), "can_configure_billing": fiscal.programmer(user)}
 
 
@@ -382,13 +383,13 @@ def validate(token: str, request: Request, db: Session = Depends(get_db)):
     if not row:
         raise HTTPException(404, "Certificado no encontrado")
     today = datetime.now(ZoneInfo("America/Lima")).date()
-    valid = row.status == "issued" and row.starts_on <= today <= row.ends_on
+    valid = not row.test_batch and row.status == "issued" and row.starts_on <= today <= row.ends_on
     if "text/html" in request.headers.get("accept", ""):
         from .medical_public import validation_page
         return validation_page(db,row)
     return JSONResponse(jsonable_encoder({"organization": "ABISSOL", "certificate": row.code, "plan": row.plan_name,
             "starts_on": row.starts_on, "ends_on": row.ends_on, "status": row.status,
-            "valid_now": valid}), headers={"Cache-Control": "no-store"})
+            "is_test":bool(row.test_batch), "valid_now": valid}), headers={"Cache-Control": "no-store"})
 
 
 def liquidation_scope(db, user):
@@ -407,7 +408,7 @@ def liquidation_candidates(db, user, payload, lock=False):
         raise HTTPException(403, "Tu perfil no puede preparar esta liquidación")
     if payload.kind == "seller":
         find(profiles_scope(db, user).filter(Profile.kind == "responsible"), payload.responsible_id)
-    eligible = scope(db, user).filter(Issuance.status == "issued", Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
+    eligible = scope(db, user).filter(Issuance.test_batch.is_(None), Issuance.status == "issued", Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
     if payload.kind == "seller":
         eligible = eligible.filter(Issuance.responsible_id == payload.responsible_id, Issuance.payment_status.in_(["collected_by_seller", "paid_to_abissol", "settled"]))
     used = db.query(Item.issuance_id).filter(Item.active_key.like(payload.kind + ":%"))
@@ -621,6 +622,8 @@ def update_billing_configuration(payload: BillingConfigurationInput, request: Re
         if key in {'sol_user','sol_password','certificate_password'} and not value:
             continue
         raw['enabled_in_v2' if key == 'enabled' else key] = value
+    if raw.get('enabled_in_v2') and raw.get('test_batch'):
+        raise HTTPException(409,'Desactiva primero el modo de pruebas; no se permite enviar a SUNAT durante las pruebas.')
     try:
         if raw.get('enabled_in_v2'):
             fiscal.validate_configuration(db,raw)
@@ -716,6 +719,10 @@ def deliver(db, request, user, row, emission):
     # Persistir el intento antes de contactar al proveedor; un corte no genera reintento automático.
     save(db, request, user, row, before)
     url = public_url(request, emission)
+    if emission.test_batch:
+        row.status='simulated'
+        row.error='PRUEBA: envío registrado sin contactar correo ni WhatsApp.'
+        return save(db,request,user,row,{'status':'sending'})
     from ..services.medical_settings import insured_message
     try:
         if row.channel == "email":
@@ -762,7 +769,7 @@ def retry_dispatch(ident: int, request: Request, db: Session = Depends(get_db), 
 
 @router.get("/reports")
 def reports(starts_on: date | None = None, ends_on: date | None = None, db: Session = Depends(get_db), user=Depends(require_access("medical-reports"))):
-    query = filtered(scope(db, user), "", starts_on, ends_on).filter(Issuance.status == "issued")
+    query = filtered(scope(db, user), "", starts_on, ends_on).filter(Issuance.test_batch.is_(None), Issuance.status == "issued")
     totals = query.with_entities(func.count(Issuance.id), func.coalesce(func.sum(Issuance.price), 0),
         func.coalesce(func.sum(Issuance.paid_amount), 0), func.coalesce(func.sum(Issuance.seller_commission), 0), func.coalesce(func.sum(Issuance.provider_cost), 0)).one()
     groups = query.with_entities(Issuance.plan_name, func.count(Issuance.id), func.sum(Issuance.price)).group_by(Issuance.plan_name).all()

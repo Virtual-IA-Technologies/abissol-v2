@@ -19,7 +19,7 @@ router = APIRouter(prefix="/integrations/medical")
 V2_ID_BASE = 1_000_000_000
 
 
-def connector(authorization: str = Header(""), db: Session = Depends(get_db)):
+def connector(request:Request,authorization: str = Header(""), db: Session = Depends(get_db)):
     scheme, _, token = authorization.partition(" ")
     if scheme.lower() != "bearer" or not 40 <= len(token) <= 180:
         raise HTTPException(401,"Credencial de integración requerida")
@@ -28,6 +28,13 @@ def connector(authorization: str = Header(""), db: Session = Depends(get_db)):
     actor = db.get(Usuario,credential.actor_id) if credential else None
     if not source or not source.active or not source.external_key or not actor or not actor.is_active or actor.deleted_at:
         raise HTTPException(401,"Integración desactivada o credencial inválida")
+    if credential.test_only:
+        if not fiscal.configuration(db)[1].get('test_batch'):
+            raise HTTPException(409,'El acceso de prueba está cerrado. No se permiten emisiones reales con esta credencial.')
+        if request.url.path.endswith('/external-users/sync'):
+            raise HTTPException(403,'El acceso de prueba no modifica usuarios ni comisiones reales')
+        request.state.medical_test_only=True
+        db.info['medical_test_only']=True
     return source, actor
 
 
@@ -37,6 +44,7 @@ def external_id(row):
 
 def issuance(db, source, ident):
     query = db.query(MedicalIssuance).filter_by(source_id=source.id)
+    if db.info.get('medical_test_only'):query=query.filter(MedicalIssuance.test_batch.is_not(None))
     row = query.filter(MedicalIssuance.id==ident-V2_ID_BASE).first() if ident>=V2_ID_BASE else query.filter_by(legacy_id=ident).first()
     if not row:
         raise HTTPException(404,"Emisión no encontrada en este origen")
@@ -61,7 +69,7 @@ def shape(db, row, request, profiles=None, invoices=None):
         "welcome_letter_api_url":url,"public_verification_url":m.public_url(request,row),"conditioned_public_url":row.conditions_url,
         "invoice_id":external_id(invoice) if invoice else None,"invoice_number":invoice.full_number if invoice else None,
         "invoice_pdf_api_url":str(request.base_url).rstrip('/')+'/abissol/api/v1/integrations/medical/billing/'+str(external_id(invoice))+'/file/PDF' if invoice else None,
-        "billing_mode":"automatic_queue","integration_version":2}
+        "test_batch":row.test_batch,"billing_mode":"local_test" if row.test_batch else "automatic_queue","integration_version":2}
 
 
 class ExternalEmission(Payload):
@@ -97,7 +105,7 @@ class ExternalEmission(Payload):
 def capabilities(db: Session = Depends(get_db), identity=Depends(connector)):
     config=fiscal.configuration(db)[1]
     return {"version":2,"source":identity[0].external_key,"emissions":True,"idempotency":True,
-            "billing_enabled":bool(config.get('enabled_in_v2')),"invoice_types":["03","01"],
+            "test_batch":config.get("test_batch"),"billing_enabled":bool(config.get('enabled_in_v2') or config.get("test_batch")),"invoice_types":["03","01"],
             "billing_mode":"automatic_queue","letter_delivery":"authenticated_api","cutover_ready":False,
             "pending":["Confirmar series exclusivas y corte del conector ALP con el adaptador V2"]}
 
@@ -110,7 +118,7 @@ def plans(db: Session = Depends(get_db), identity=Depends(connector)):
 
 def prepare_external(payload, request, db, identity, dry_run=False):
     source, actor = identity
-    if payload.metadata.get('is_test') and not dry_run:
+    if payload.metadata.get('is_test') and not dry_run and not fiscal.configuration(db)[1].get('test_batch'):
         raise HTTPException(422,"Para pruebas usa emissions/validate; no se registran ventas simuladas en producción")
     if payload.external_source != source.external_key:
         raise HTTPException(403,"La credencial no autoriza este origen")
@@ -118,6 +126,8 @@ def prepare_external(payload, request, db, identity, dry_run=False):
     db.query(MedicalSource).filter_by(id=source.id).with_for_update().one()
     existing=db.query(MedicalIssuance).filter_by(external_source=source.external_key,external_reference=payload.external_reference).first()
     if existing:
+        if db.info.get('medical_test_only') and not existing.test_batch:
+            raise HTTPException(409,'La referencia pertenece a una emisión real')
         em=db.get(MedicalProfile,existing.emitter_id)
         rp=db.get(MedicalProfile,existing.responsible_id)
         if existing.source_id!=source.id or existing.plan_id!=payload.plan_id or existing.document_number!=payload.contractor_document_number or existing.document_type!=payload.contractor_document_type or em.external_user_id!=str(payload.external_emitter_id) or rp.external_user_id!=str(payload.external_responsible_id):
@@ -164,6 +174,7 @@ def create_emission(payload: ExternalEmission, request: Request, db: Session=Dep
 def emissions(request: Request, date_from: date | None=None, date_to: date | None=None, search: str=Query('',max_length=180),
               offset: int=Query(0,ge=0),limit: int=Query(100,ge=1,le=500),db: Session=Depends(get_db),identity=Depends(connector)):
     query=m.filtered(db.query(MedicalIssuance).filter_by(source_id=identity[0].id),search,date_from,date_to)
+    if db.info.get('medical_test_only'):query=query.filter(MedicalIssuance.test_batch.is_not(None))
     total=query.count()
     rows=query.order_by(MedicalIssuance.id.desc()).offset(offset).limit(limit).all()
     ids={ident for row in rows for ident in (row.emitter_id,row.responsible_id)}
@@ -193,7 +204,7 @@ def letter(ident:int,request:Request,db:Session=Depends(get_db),identity=Depends
 def pending(period_start:date,period_end:date,db:Session=Depends(get_db),identity=Depends(connector)):
     if period_end<period_start:
         raise HTTPException(422,"El período está invertido")
-    query=db.query(MedicalIssuance).filter_by(source_id=identity[0].id,status='issued')
+    query=db.query(MedicalIssuance).filter_by(source_id=identity[0].id,status='issued',test_batch=None)
     active=db.query(m.Item.issuance_id).join(m.Liquidation,m.Liquidation.id==m.Item.liquidation_id).filter(m.Item.active_key.is_not(None),m.Liquidation.kind=='seller')
     rows=query.filter(MedicalIssuance.sale_date.between(period_start,period_end),MedicalIssuance.payment_status!='pending',~MedicalIssuance.id.in_(active.scalar_subquery())).order_by(MedicalIssuance.id).limit(1001).all()
     if len(rows)>1000:
@@ -322,6 +333,7 @@ def send_information(ident:int,payload:ExternalDispatch,request:Request,db:Sessi
 
 def scoped_invoice(db,source,ident):
     query=db.query(MedicalInvoice).join(MedicalIssuance,MedicalIssuance.id==MedicalInvoice.issuance_id).filter(MedicalIssuance.source_id==source.id)
+    if db.info.get('medical_test_only'):query=query.filter(MedicalIssuance.test_batch.is_not(None))
     row=query.filter(MedicalInvoice.id==ident-V2_ID_BASE).first() if ident>=V2_ID_BASE else query.filter(MedicalInvoice.legacy_id==ident).first()
     if not row:raise HTTPException(404,'Comprobante no encontrado en este origen')
     return row
@@ -416,7 +428,7 @@ def invoice_detail(ident:int,request:Request,db:Session=Depends(get_db),identity
 def generate_invoice(ident:int,request:Request,db:Session=Depends(get_db),identity=Depends(connector)):
     row=scoped_invoice(db,identity[0],ident)
     job=db.query(m.FiscalJob).filter_by(invoice_id=row.id).with_for_update().first()
-    if row.legacy_id:
+    if row.legacy_id or (row.details or {}).get('test_batch'):
         return {'data':invoice_shape(db,row,request)}
     if not job:raise HTTPException(409,'No existe cola fiscal para este comprobante')
     try:
@@ -431,6 +443,8 @@ def generate_invoice(ident:int,request:Request,db:Session=Depends(get_db),identi
 @router.post('/billing/{ident}/send-sunat')
 def send_invoice(ident:int,request:Request,db:Session=Depends(get_db),identity=Depends(connector)):
     row=scoped_invoice(db,identity[0],ident)
+    if (row.details or {}).get('test_batch') or fiscal.configuration(db)[1].get('test_batch'):
+        return {'data':invoice_shape(db,row,request),'sent':False,'test_mode':True}
     if row.legacy_id:
         return {'data':invoice_shape(db,row,request),'historical':True}
     job=db.query(m.FiscalJob).filter_by(invoice_id=row.id).first()

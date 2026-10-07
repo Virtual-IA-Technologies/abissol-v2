@@ -1,5 +1,13 @@
 # Estado actual
 
+## Pruebas sin numeración real — 07/10/2026
+
+Modo temporal para emisiones nuevas internas/externas: lote identificable,
+documentos locales marcados, sin firma ni cola SUNAT, envíos simulados y exclusión
+de liquidaciones/reportes reales. Portal AFOCAT separado y credencial de prueba.
+Migración 0015; inventario para limpieza posterior sin reiniciar correlativos.
+Ver [operación y acceso externo](../03-MODULOS/PRUEBAS_EMISION.md).
+
 ## Documentos y flujo de emisión — 07/10/2026
 
 Plantillas originales Laravel para carta versión 7, A4, ticket y bienvenida HTML,

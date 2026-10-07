@@ -44,7 +44,7 @@ def statements(search:str=Query('',max_length=180),offset:int=Query(0,ge=0),limi
         func.sum(E.price).label('sales'),func.sum(case((E.payment_status=='pending',E.price),else_=0)).label('uncollected'),
         func.sum(case((available,deposit),else_=0)).label('unliquidated_deposit'),
         func.sum(case((available,E.seller_commission),else_=0)).label('unliquidated_commission'))
-        .join(m.Source,m.Source.id==E.source_id).filter(E.responsible_id.in_(ids),E.status=='issued').group_by(E.responsible_id)}
+        .join(m.Source,m.Source.id==E.source_id).filter(E.test_batch.is_(None),E.responsible_id.in_(ids),E.status=='issued').group_by(E.responsible_id)}
     grouped=db.query(V.liquidation_id,*r.aggregate()).join(L,L.id==V.liquidation_id).filter(L.responsible_id.in_(ids),L.kind=='seller',L.legacy_id.is_(None),V.active.is_(True)).group_by(V.liquidation_id).subquery()
     z=lambda name:func.coalesce(getattr(grouped.c,name),0)
     native=(L.legacy_id.is_(None))&(L.status!='cancelled')

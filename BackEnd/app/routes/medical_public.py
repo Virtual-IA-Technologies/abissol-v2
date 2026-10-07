@@ -27,6 +27,7 @@ def public_record(db,token):
 def validation_page(db,row):
     today=datetime.now(ZoneInfo('America/Lima')).date()
     title='Programa anulado' if row.status=='cancelled' else 'Vigencia por iniciar' if row.starts_on>today else 'Programa no vigente' if row.ends_on<today else 'Programa vigente'
+    if row.test_batch:title='PRUEBA LOCAL — No acredita cobertura real'
     masked=row.document_number[:2]+'****'+row.document_number[-2:]
     values=[('Código',row.code),('Documento',masked),('Afiliado',row.customer),('Plan',row.plan_name),('Fecha inicio',row.starts_on.strftime('%d/%m/%Y')),('Fecha fin',row.ends_on.strftime('%d/%m/%Y'))]
     fields=''.join('<div class="assistance-field"><span>'+label+'</span><b>'+escape(value)+'</b></div>' for label,value in values)
