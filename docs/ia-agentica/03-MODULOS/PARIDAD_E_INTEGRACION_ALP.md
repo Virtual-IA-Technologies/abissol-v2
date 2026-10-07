@@ -80,9 +80,14 @@ un valor anterior después de emitir un comprobante real.
 - Pruebas del conector: aislamiento, idempotencia, cobertura, tarifas, sincronización,
   reserva de envíos y generación/descarga fiscal con proveedor simulado.
 - Factura contado/crédito firmada: validación con XSD UBL Invoice 2.1.
+- SUNAT Beta aceptó ambas facturas sintéticas (CDR código 0), sin ventas reales.
 - TypeScript y ESLint de los componentes modificados; navegador con DNI/RUC
   simulados, respuestas tardías, fechas Lima y diseño móvil, sin guardar ventas.
 - Migraciones 0009/0010 y comprobación Alembic local sin diferencias pendientes.
+- Verificación productiva detectó históricos sin `external_source` y catálogo
+  geográfico vacío: el conector obtiene el origen de su fuente autorizada (con
+  canal interno/externo separado); migración 0011 incorpora el CSV público existente
+  sin sobrescribir catálogos cargados. Pestañas 6+4 verificadas por HTTPS.
 
 Referencias oficiales: [SUNAT, preguntas frecuentes sobre crédito y cuotas](https://cpe.sunat.gob.pe/informacion_general/preguntas_frecuentes)
 y [guía UBL 2.1 de factura](https://cpe.sunat.gob.pe/sites/default/files/inline-files/guia%2Bxml%2Bfactura%2Bversion%202-1%2B1%2B0%20%282%29_0%20%282%29.pdf).

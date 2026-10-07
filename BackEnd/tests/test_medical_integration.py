@@ -99,6 +99,9 @@ class IntegrationTests(unittest.TestCase):
     def test_portal_and_connector_share_overlap_guard(self):
         payload=self.setup_connector()
         first=self.issuance()
+        listed=self.client.get(API+'/emissions',headers=self.connector_headers).json()['data']
+        self.assertEqual(listed[0]['external_source'],'externa_alp')
+        self.assertEqual(listed[0]['issuance_channel'],'internal')
         self.send(payload,expected=409)
         self.send({**payload,'starts_at':(medical.datetime.fromisoformat(first['ends_on']).date()+timedelta(days=1)).isoformat()})
         with self.sessions() as db:self.assertEqual(db.query(MedicalIssuance).count(),2)
