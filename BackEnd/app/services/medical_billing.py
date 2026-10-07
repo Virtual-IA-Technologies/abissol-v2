@@ -211,6 +211,8 @@ def prepare_artifacts(db,invoice,job,raw):
         ('XML',xml),('ZIP',sunat.package_xml(name,xml)),('PDF',printable_pdf(invoice,digest)))}
     invoice.details=data
     invoice.status='generated'
+    from .medical_documents import invoice as archive_invoice
+    archive_invoice(db,invoice)
     return config
 
 
@@ -247,6 +249,8 @@ def process_job(db, ident):
         data['files'] = {**data['files'],'CDR':write_artifact(invoice,'CDR',content)}
         data.update(sunat_message=result['message'],sunat_code=result['code'],sunat_notes=result['notes'])
         invoice.details = data
+        from .medical_documents import invoice as archive_invoice
+        archive_invoice(db,invoice)
         job.state,job.error = result['status'],None
         invoice.sunat_status = result['status']
         invoice.status = 'issued' if result['status']=='accepted' else 'rejected'

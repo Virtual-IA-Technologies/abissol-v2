@@ -28,13 +28,13 @@ manager = require_access('documentos', 'gestor')
 @router.get('/almacenamiento')
 def storage_summary(db:Session=Depends(get_db),user=Depends(reader)):
     # Solo propiedad: no contabilizar ni revelar archivos privados de otros usuarios.
-    q=db.query(DocumentVersion).join(Document,Document.id==DocumentVersion.document_id).filter(Document.owner_id==user.id)
+    q=db.query(DocumentVersion).join(Document,Document.id==DocumentVersion.document_id).filter(Document.owner_id==user.id,Document.is_system.is_(False))
     versions,total_bytes,current_bytes,trash_bytes=q.with_entities(func.count(DocumentVersion.id),
         func.coalesce(func.sum(DocumentVersion.size),0),
         func.coalesce(func.sum(case((DocumentVersion.number==Document.current_version,DocumentVersion.size),else_=0)),0),
         func.coalesce(func.sum(case((Document.deleted_at.is_not(None),DocumentVersion.size),else_=0)),0)).one()
     active,trash=db.query(func.coalesce(func.sum(case((Document.deleted_at.is_(None),1),else_=0)),0),
-        func.coalesce(func.sum(case((Document.deleted_at.is_not(None),1),else_=0)),0)).filter(Document.owner_id==user.id).one()
+        func.coalesce(func.sum(case((Document.deleted_at.is_not(None),1),else_=0)),0)).filter(Document.owner_id==user.id,Document.is_system.is_(False)).one()
     groups=q.filter(Document.deleted_at.is_(None),DocumentVersion.number==Document.current_version).with_entities(
         DocumentVersion.sha256,func.count().label('copies'),func.max(DocumentVersion.size).label('size')).group_by(DocumentVersion.sha256).having(func.count()>1).subquery()
     duplicates,duplicate_bytes=db.query(func.coalesce(func.sum(groups.c.copies-1),0),func.coalesce(func.sum((groups.c.copies-1)*groups.c.size),0)).one()
@@ -135,11 +135,11 @@ def purge_trash(payload: PurgeWrite, request: Request, db: Session = Depends(get
 
 @router.get('/carpetas')
 def folders(trash: bool = False, db: Session = Depends(get_db), user=Depends(reader)):
-    query = db.query(DocumentFolder).filter_by(owner_id=user.id)
+    query = service.folder_query(db,user,trash)
     rows = query.filter(DocumentFolder.deleted_at.is_not(None) if trash else DocumentFolder.deleted_at.is_(None)).order_by(DocumentFolder.name, DocumentFolder.id).all()
     visible_ids = {r.id for r in rows}
     return [{'id': r.id, 'name': r.name, 'parent_id': r.parent_id if r.parent_id in visible_ids else None,
-             'deleted_at': r.deleted_at.isoformat() if r.deleted_at else None} for r in rows]
+             'managed':bool(r.system_key),'deleted_at': r.deleted_at.isoformat() if r.deleted_at else None} for r in rows]
 
 
 @router.post('/carpetas', status_code=201)
@@ -197,10 +197,12 @@ def folder_tree(db, user, folder_id):
     root = db.query(DocumentFolder).filter_by(id=folder_id, owner_id=user.id).with_for_update().first()
     if root is None:
         raise HTTPException(404, 'Carpeta no disponible')
+    if root.system_key:
+        raise HTTPException(403,'No se puede eliminar ni restaurar una carpeta administrada')
     result, level, seen = [root], [root.id], {root.id}
     while level:
         children = db.query(DocumentFolder).filter(DocumentFolder.parent_id.in_(level)).order_by(DocumentFolder.id).with_for_update().all()
-        if any(child.owner_id != user.id or child.id in seen for child in children):
+        if any(child.owner_id != user.id or child.system_key or child.id in seen for child in children):
             raise HTTPException(409, 'La estructura de la carpeta requiere revisión')
         level = [child.id for child in children]
         seen.update(level)
@@ -326,6 +328,8 @@ def update(document_id: int, payload: DocumentWrite, request: Request, db: Sessi
 @router.post('/{document_id}/copiar', status_code=201)
 def copy_document(document_id: int, payload: CopyDocument, request: Request, db: Session = Depends(get_db), user=Depends(editor)):
     source = service.get_document(db, user, document_id, lock=True)
+    if source.is_system:
+        raise HTTPException(403,'El archivo administrado conserva los permisos de su origen; usa Descargar para obtener una copia')
     service.check_revision(source, payload.revision)
     service.get_folder(db, user, payload.folder_id)
     original = db.query(DocumentVersion).filter_by(document_id=source.id, number=source.current_version).one()

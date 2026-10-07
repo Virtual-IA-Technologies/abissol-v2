@@ -99,6 +99,12 @@ def save(db, request, user, row, before=None):
     try:
         db.add(row)
         db.flush()
+        from ..services import medical_documents as archive
+        if isinstance(row,Issuance):archive.emission(db,row,user.id)
+        if isinstance(row,Voucher):archive.voucher(db,row,user.id)
+        if isinstance(row,Liquidation) and row.kind=='meta' and before is None:
+            entries=db.query(Issuance).join(Item,Item.issuance_id==Issuance.id).filter(Item.liquidation_id==row.id).order_by(Issuance.id).all()
+            if entries:archive.monthly(db,row,entries,user.id)
         audit_change(db, request, user, row.__tablename__, row.id, before=before, after=dump(row), module="abissol_medical")
         db.commit()
     except IntegrityError as exc:

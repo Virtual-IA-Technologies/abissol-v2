@@ -12,7 +12,7 @@ from . import documents as service
 
 def purge(db, owner_id, items, request=None, user=None, cutoff=None):
     ids = sorted(set(item['id'] for item in items))
-    rows = db.query(Document).filter(Document.id.in_(ids), Document.owner_id == owner_id).order_by(Document.id).with_for_update().all()
+    rows = db.query(Document).filter(Document.id.in_(ids), Document.owner_id == owner_id,Document.is_system.is_(False)).order_by(Document.id).with_for_update().all()
     revisions = {item['id']: item['revision'] for item in items}
     if len(rows) != len(ids):
         raise HTTPException(404, 'Documento no disponible')
@@ -71,7 +71,7 @@ def run_due(factory=None):
             if not policy or not policy.days:
                 continue
             cutoff = utc_now() - timedelta(days=policy.days)
-            rows = db.query(Document).filter(Document.owner_id == owner_id, Document.deleted_at <= cutoff).order_by(Document.id).limit(100).with_for_update(skip_locked=True).all()
+            rows = db.query(Document).filter(Document.owner_id == owner_id,Document.is_system.is_(False), Document.deleted_at <= cutoff).order_by(Document.id).limit(100).with_for_update(skip_locked=True).all()
             if rows:
                 purge(db, owner_id, [{'id': r.id, 'revision': r.revision} for r in rows], cutoff=cutoff)
     with factory() as db:

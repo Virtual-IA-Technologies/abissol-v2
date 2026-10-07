@@ -5,6 +5,7 @@ import {Button} from '@/components/ui/button';
 import {Textarea} from '@/components/ui/textarea';
 import type {Annotation} from './notes-api';
 const Reviewer=lazy(()=>import('./reviewer'));
+const SpreadsheetPreview=lazy(()=>import('./spreadsheet-preview'));
 
 export function FileViewer({file, documentId, number, notes, onNotes, onDirty, onText, expanded=false}: {
   expanded?: boolean; file: File; documentId?: number; number?: number; notes?: Annotation[];
@@ -15,8 +16,11 @@ export function FileViewer({file, documentId, number, notes, onNotes, onDirty, o
   const extension=file.name.split('.').pop()?.toLowerCase();
   if(!url)return <p>Cargando vista previa…</p>;
   if(extension==='pdf'||['png','jpg','jpeg','webp'].includes(extension||'')) return <div className={expanded?"h-full min-h-0":"h-[62vh] min-h-80"}><Suspense fallback={<p>Cargando visor…</p>}><Reviewer key={url} fileId={documentId} number={number} url={url} name={file.name} isPdf={extension==='pdf'} localNotes={notes} onLocalNotes={onNotes} onDirtyChange={onDirty}/></Suspense></div>;
-  if(['txt','md'].includes(extension||''))return <div className={expanded?'h-full [&>div]:flex [&>div]:h-full [&>div]:flex-col [&_textarea]:min-h-0 [&_textarea]:flex-1 [&_pre]:max-h-none [&_pre]:flex-1 p-2':undefined}><TextViewer file={file} onSave={onText} onDirty={onDirty}/></div>;
-  if(['docx','xlsx','pptx'].includes(extension||''))return <OfficePreview file={file}/>;
+  if(['txt','md','xml'].includes(extension||''))return <div className={expanded?'h-full [&>div]:flex [&>div]:h-full [&>div]:flex-col [&_textarea]:min-h-0 [&_textarea]:flex-1 [&_pre]:max-h-none [&_pre]:flex-1 p-2':undefined}><TextViewer file={file} onSave={onText} onDirty={onDirty}/></div>;
+  if(extension==='xlsx')return <Suspense fallback={<p>Leyendo hojas…</p>}><SpreadsheetPreview file={file}/></Suspense>;
+  if(extension==='docx')return <DocxViewer file={file}/>;
+  if(extension==='zip')return <div className="rounded-lg border p-8 text-center text-sm"><p className="font-medium">{file.name}</p><p className="mt-2 text-muted-foreground">Archivo comprimido original. Descárgalo para consultar sus archivos XML y firmas.</p></div>;
+  if(['pptx'].includes(extension||''))return <OfficePreview file={file}/>;
   return <div className="rounded-lg border p-8 text-center text-sm"><p className="font-medium">{file.name}</p><p className="mt-2 text-muted-foreground">Archivo Office seleccionado. La vista de Microsoft requiere una copia temporal accesible por Internet.</p></div>;
 }
 

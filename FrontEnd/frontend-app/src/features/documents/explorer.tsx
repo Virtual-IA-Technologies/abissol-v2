@@ -55,15 +55,15 @@ export function Explorer({ onPurge, controls, onRefresh, onCut, search, onSearch
   useEffect(()=>{if(document.activeElement===document.body)root.current?.focus();},[]);
   const select=(row:DocumentRow,event?:MouseEvent)=>{setSelectedFolder(null);if(event?.shiftKey&&anchor.current!==null){const a=rows.findIndex(r=>r.id===anchor.current),b=rows.indexOf(row);setSelected(rows.slice(Math.max(0,Math.min(a,b)),Math.max(a,b)+1).map(r=>r.id));}else if(event?.ctrlKey||event?.metaKey){setSelected(old=>old.includes(row.id)?old.filter(id=>id!==row.id):[...old,row.id]);anchor.current=row.id;}else{setSelected([row.id]);anchor.current=row.id;}root.current?.focus();};
   const dropProps=(id:number)=>({
-    onDragOver:(event:DragEvent)=>{if(canEdit&&(drag.current.length||event.dataTransfer.types.includes('Files'))){event.preventDefault();event.dataTransfer.dropEffect='move';setOver(id);}},
+    onDragOver:(event:DragEvent)=>{if(canEdit&&!folders.some(item=>item.id===id&&item.managed)&&(drag.current.length||event.dataTransfer.types.includes('Files'))){event.preventDefault();event.dataTransfer.dropEffect='move';setOver(id);}},
     onDragLeave:()=>setOver(null),
-    onDrop:(event:DragEvent)=>{event.preventDefault();event.stopPropagation();const group=drag.current;drag.current=[];setOver(null);if(!canEdit)return;if(event.dataTransfer.files.length)onFiles(Array.from(event.dataTransfer.files),id);else if(group.length)onMove(group,id);},
+    onDrop:(event:DragEvent)=>{event.preventDefault();event.stopPropagation();const group=drag.current;drag.current=[];setOver(null);if(!canEdit||folders.some(item=>item.id===id&&item.managed))return;if(event.dataTransfer.files.length)onFiles(Array.from(event.dataTransfer.files),id);else if(group.length)onMove(group,id);},
     style:over===id?{outline:'2px solid var(--primary)',background:'var(--accent)'}:undefined,
   });
   const selectFolderItem=(id:number)=>{setSelected([]);setSelectedFolder(id);root.current?.focus();};
   const folderActions=(item:DocumentFolder):RowAction[]=>[
     {label:'Abrir carpeta',icon:Folder,onSelect:()=>navigate(item.id)},
-    {label:item.deleted_at?'Restaurar carpeta':'Eliminar carpeta',icon:item.deleted_at?RotateCcw:Trash2,destructive:!item.deleted_at,hidden:!canManageFolders,onSelect:()=>onDeleteFolder(item.id)},
+    {label:item.deleted_at?'Restaurar carpeta':'Eliminar carpeta',icon:item.deleted_at?RotateCcw:Trash2,destructive:!item.deleted_at,hidden:!!item.managed||!canManageFolders,onSelect:()=>onDeleteFolder(item.id)},
   ];
   const folderProps=(item:DocumentFolder)=>({
     ...dropProps(item.id), 'data-file':true, 'data-folder-id':item.id,

@@ -1,5 +1,13 @@
 # Estado actual
 
+## Central documental por carpetas — 07/10/2026
+
+Documentos reúne archivos personales y documentos automáticos de Emisiones,
+Facturación, Liquidaciones y Planes. Los artefactos conservan permisos de origen,
+versiones y SHA-256; se incorporan al generarse y mediante sincronización histórica
+idempotente. Visor local para PDF, imágenes, XML, DOCX y XLSX. Migración 0012.
+Ver [Central de documentos](../03-MODULOS/CENTRAL_DOCUMENTOS.md).
+
 ## Paridad de emisiones y conector ALP — 07/10/2026
 
 Boleta/factura elegida antes de emitir, correlativos separados, factura a crédito

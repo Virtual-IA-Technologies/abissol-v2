@@ -22,6 +22,13 @@ API = "/abissol/api/v1"
 
 class PlatformTests(unittest.TestCase):
     def setUp(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        self.archive_directory=TemporaryDirectory()
+        self.addCleanup(self.archive_directory.cleanup)
+        self.archive_patch=patch('app.services.documents.STORAGE',Path(self.archive_directory.name))
+        self.archive_patch.start()
+        self.addCleanup(self.archive_patch.stop)
         self.engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
         event.listen(self.engine, "connect", lambda conn, _: conn.execute("PRAGMA foreign_keys=ON"))
         Base.metadata.create_all(self.engine)

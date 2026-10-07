@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, JSON
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, UniqueConstraint, JSON
 from ..database import Base
 from ..utils.time import utc_now
 
@@ -20,6 +20,7 @@ class DocumentFolder(Base):
     parent_id = Column(Integer, ForeignKey('document_folders.id'), index=True)
     owner_id = Column(Integer, ForeignKey('usuarios.id'), nullable=False, index=True)
     name = Column(String(180), nullable=False)
+    system_key = Column(String(180), unique=True)
     deleted_at = Column(DateTime, index=True)
     trash_batch = Column(String(32), index=True)
 
@@ -31,12 +32,23 @@ class Document(Base):
     folder_id = Column(Integer, ForeignKey('document_folders.id'), index=True)
     title = Column(String(180), nullable=False, index=True)
     description = Column(String(1000), nullable=False, default='')
+    is_system = Column(Boolean, nullable=False, default=False, server_default='0', index=True)
     current_version = Column(Integer, nullable=False, default=1)
     revision = Column(Integer, nullable=False, default=1)
     deleted_at = Column(DateTime, index=True)
     updated_at = Column(DateTime, nullable=False, default=utc_now, index=True)
     trash_batch = Column(String(32), index=True)
     __mapper_args__ = {'version_id_col': revision}
+
+
+class DocumentBinding(Base):
+    __tablename__ = 'document_bindings'
+    __table_args__ = (UniqueConstraint('source_type','source_id','artifact_key',name='uq_document_source_artifact'),)
+    id = Column(Integer, primary_key=True)
+    document_id = Column(Integer, ForeignKey('documents.id'), nullable=False, unique=True)
+    source_type = Column(String(40), nullable=False)
+    source_id = Column(Integer, nullable=False)
+    artifact_key = Column(String(80), nullable=False)
 
 
 class DocumentVersion(Base):

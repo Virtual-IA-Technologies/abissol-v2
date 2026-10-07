@@ -1,7 +1,7 @@
 import api from '@/lib/api';
-export interface Folder {id: number; name: string; parent_id: number | null; deleted_at?: string | null}
+export interface Folder {id: number; name: string; parent_id: number | null; managed?: boolean; deleted_at?: string | null}
 export interface Version {author_name?: string; id: number; number: number; filename: string; mime: string; size: number; reason: string; created_at: string; processing: string}
-export interface DocumentRow {id: number; title: string; description: string; folder_id: number | null; current_version: number; revision: number; owned: boolean; updated_at: string; deleted_at: string | null; file: Version}
+export interface DocumentRow {id: number; title: string; description: string; folder_id: number | null; current_version: number; revision: number; owned: boolean; managed?: boolean; updated_at: string; deleted_at: string | null; file: Version}
 export interface Detail extends DocumentRow {versions: Version[]; shares: {id: number; name: string}[]}
 export interface DocumentIndex {items: DocumentRow[]; total: number; total_bytes: number}
 export interface Filters {q: string; folder?: number; view: string; kind: string; order: string; direction: string; page: number; size: number}

@@ -21,6 +21,10 @@ en [Negocio ABISSOL](docs/ia-agentica/03-MODULOS/NEGOCIO_ABISSOL.md).
 La API de emisiones externas y el adaptador ALP están preparados; el corte desde
 Laravel sigue pendiente de definir series. Ver [comparación e integración ALP](docs/ia-agentica/03-MODULOS/PARIDAD_E_INTEGRACION_ALP.md).
 
+Documentos centraliza certificados, comprobantes, constancias y archivos META en
+carpetas automáticas, con permisos de su origen y originales versionados. Ver
+[Central de documentos](docs/ia-agentica/03-MODULOS/CENTRAL_DOCUMENTOS.md).
+
 Conserva sesiones, usuarios, roles, permisos Wolverine, menús, auditoría, apariencia,
 calendario, notificaciones, documentos, documentación, búsqueda y componentes reutilizables.
 No incluye Emisiones, Control, Siniestros, Contabilidad, facturación CAT, MTC,

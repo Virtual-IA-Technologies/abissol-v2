@@ -25,9 +25,9 @@ export function ExplorerTree({ folders, folder, location, navigate, onLocation, 
     ancestors.add(current.id);
     current = folders.find(item => item.id === current?.parent_id);
   }
-  const branch = (parent: number | null, depth = 0) => {
+  const branch = (parent: number | null, depth = 0, managed=false) => {
     if (depth > 10) return null;
-    return folders.filter(item => item.parent_id === parent)
+    return folders.filter(item => item.parent_id === parent && !!item.managed===managed)
       .sort((a, b) => a.name.localeCompare(b.name, 'es', { numeric: true }))
       .map(item => {
         const children = folders.some(child => child.parent_id === item.id);
@@ -43,7 +43,7 @@ export function ExplorerTree({ folders, folder, location, navigate, onLocation, 
               <Icon className="size-4 shrink-0 text-amber-600" /><span className="truncate">{item.name}</span>
             </button>
           </div>
-          {children && opened && <ul className="ml-3 border-l pl-1">{branch(item.id, depth + 1)}</ul>}
+          {children && opened && <ul className="ml-3 border-l pl-1">{branch(item.id, depth + 1,managed)}</ul>}
         </li>;
       });
   };
@@ -52,6 +52,7 @@ export function ExplorerTree({ folders, folder, location, navigate, onLocation, 
     <p className="px-3 pb-2 text-xs font-medium text-muted-foreground">Ubicaciones</p>
     <button className={locationClass(folder === 0)} {...dropProps(0)} aria-current={folder === 0 ? 'location' : undefined} onClick={() => navigate(0)}><HardDrive className="size-4 shrink-0 text-blue-600" />Mis archivos</button>
     <ul className="ml-2">{branch(null)}</ul>
+    {folders.some(item=>item.managed)&&<><p className="px-3 pt-4 pb-2 text-xs font-medium text-muted-foreground">Documentos de ABISSOL</p><ul>{branch(null,0,true)}</ul></>}
     <div className="my-3 border-t" />
     <button className={locationClass(location === 'shared')} onClick={() => onLocation('shared')}><Share2 className="size-4 shrink-0 text-violet-600" />Compartidos conmigo</button>
     <button className={locationClass(location === 'all')} onClick={() => onLocation('all')}><FolderOpen className="size-4 shrink-0 text-amber-600" />Todos los archivos</button>

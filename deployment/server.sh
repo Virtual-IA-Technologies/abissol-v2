@@ -35,6 +35,7 @@ with SessionLocal() as db:
     sync_repository(db)
 print('Plataforma y documentación sincronizadas.')
 PY
+runuser -u abissol -- "$root/.venv/bin/python" scripts/sync_medical_documents.py --expected-database abissol_v2
 previous=$(readlink "$root/current" || true)
 ln -sfn "$release" "$root/current.next"
 mv -Tf "$root/current.next" "$root/current"

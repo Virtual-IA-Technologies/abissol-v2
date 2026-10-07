@@ -54,7 +54,7 @@ def notes(document_id: int, number: int, db: Session = Depends(get_db), user=Dep
     document, version = version_for(db, user, document_id, number)
     row = db.get(DocumentNotes, version.id)
     return {'items': row.items if row else [], 'revision': row.revision if row else 0,
-            'can_edit': document.owner_id == user.id and ACCESS_RANK[access_by_slug(db, user).get('documentos', 'none')] >= ACCESS_RANK['editor']}
+            'can_edit': not document.is_system and document.owner_id == user.id and ACCESS_RANK[access_by_slug(db, user).get('documentos', 'none')] >= ACCESS_RANK['editor']}
 
 
 @router.put('/{document_id}/versiones/{number}/notas')
