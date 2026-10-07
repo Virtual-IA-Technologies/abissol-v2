@@ -59,6 +59,10 @@ class MedicalIssuance(Base):
     document_type = Column(String(10), nullable=False)
     document_number = Column(String(20), nullable=False, index=True)
     customer = Column(String(180), nullable=False)
+    first_names = Column(String(100), nullable=False, default="", server_default="")
+    paternal_surname = Column(String(80), nullable=False, default="", server_default="")
+    maternal_surname = Column(String(80), nullable=False, default="", server_default="")
+    billing_preference = Column(JSON)
     email = Column(String(180), nullable=False, default="")
     phone = Column(String(25), nullable=False, default="")
     sale_date = Column(Date, nullable=False)
@@ -81,6 +85,21 @@ class MedicalIssuance(Base):
     legacy_status = Column(String(40))
     created_by = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
     created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class MedicalIntegrationCredential(Base):
+    __tablename__ = "medical_integration_credentials"
+    id = Column(Integer, primary_key=True)
+    source_id = Column(Integer, ForeignKey("medical_sources.id"), nullable=False, index=True)
+    actor_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False)
+    token_hash = Column(String(64), unique=True, nullable=False)
+    active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, nullable=False, default=utc_now)
+
+
+class MedicalCoverageLock(Base):
+    __tablename__ = "medical_coverage_locks"
+    document_hash = Column(String(64), primary_key=True)
 
 
 class MedicalLiquidation(Base):

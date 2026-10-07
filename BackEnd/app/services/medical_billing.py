@@ -61,6 +61,9 @@ def validate_configuration(db, raw):
         raise sunat.FiscalError('La serie exclusiva V2 debe tener B y tres caracteres alfanuméricos.')
     if series in {s.get('series') for s in raw.get('series', [])}:
         raise sunat.FiscalError('La serie sigue reservada al sistema anterior. Utiliza una exclusiva de V2.')
+    invoice_series=raw.get('v2_invoice_series','')
+    if invoice_series and (not re.fullmatch(r'F[A-Z0-9]{3}',invoice_series) or invoice_series in {s.get('series') for s in raw.get('series',[])}):
+        raise sunat.FiscalError('La serie de factura debe ser exclusiva V2: F y tres caracteres alfanuméricos.')
     key, cert = sunat.read_certificate(certificate_bytes(db, raw),raw.get('certificate_password'))
     if raw['environment'] == 'production' and raw['ruc'] not in cert.subject.rfc4514_string():
         raise sunat.FiscalError('El RUC configurado no aparece en el titular del certificado.')
@@ -80,6 +83,7 @@ def public_configuration(db):
     return {**{k:raw.get(k) for k in PUBLIC_FIELDS}, 'imported':True,'enabled':bool(raw.get('enabled_in_v2')),
             'ready':ready,'problem':problem,'certificate_expires_at':expires,
             'v2_series':raw.get('v2_series',''), 'v2_counter':raw.get('v2_counter',0),
+            'v2_invoice_series':raw.get('v2_invoice_series',''),'v2_invoice_counter':raw.get('v2_invoice_counter',0),
             'credentials_preserved':bool(raw.get('sol_user') and raw.get('sol_password')),
             'certificate_preserved':bool(raw.get('certificate_path_file_id')),
             'series':[{k:s.get(k) for k in ('document_type','series','current_number')} for s in raw.get('series',[])],
@@ -87,7 +91,7 @@ def public_configuration(db):
 
 
 def enqueue_boleta(db, emission):
-    """Called inside the sale/payment transaction. Never sends network requests."""
+    """Queue the requested invoice, defaulting to boleta, inside the sale transaction."""
     row, raw = configuration(db, lock=True)
     if not raw.get('enabled_in_v2') or emission.legacy_id:
         return None
@@ -101,23 +105,32 @@ def enqueue_boleta(db, emission):
         items = sunat.plan_items(emission.plan_name, emission.price)
     except sunat.FiscalError as exc:
         raise HTTPException(422,str(exc)) from exc
-    counter = int(raw.get('v2_counter',0)) + 1
-    if counter > 99999999 or not re.fullmatch(r'B[A-Z0-9]{3}',raw.get('v2_series','')):
+    preference=emission.billing_preference or {}
+    is_invoice=preference.get('invoice_type_code')=='01'
+    series_key,counter_key=('v2_invoice_series','v2_invoice_counter') if is_invoice else ('v2_series','v2_counter')
+    counter = int(raw.get(counter_key,0)) + 1
+    series=raw.get(series_key,'')
+    if counter > 99999999 or not re.fullmatch(r'F[A-Z0-9]{3}' if is_invoice else r'B[A-Z0-9]{3}',series):
         raise HTTPException(422,'Revisar serie y correlativo fiscal antes de emitir.')
-    number = f"{raw['v2_series']}-{counter}"
+    if series in {s.get('series') for s in raw.get('series',[])}:
+        raise HTTPException(422,'La serie sigue reservada al sistema anterior.')
+    number = f"{series}-{counter}"
     if db.query(MedicalInvoice.id).filter_by(full_number=number).first():
         raise HTTPException(409,'Numeración fiscal ya utilizada; revisar configuración.')
-    invoice = MedicalInvoice(issuance_id=emission.id, draft_key=emission.id, document_type='boleta', customer=emission.customer,
-        document_number=emission.document_number,total=emission.price,status='queued',sunat_status='queued',
+    invoice = MedicalInvoice(issuance_id=emission.id, draft_key=emission.id, document_type='factura' if is_invoice else 'boleta', customer=preference.get('customer_name') or emission.customer,
+        document_number=preference.get('customer_document_number') or emission.document_number,total=emission.price,status='queued',sunat_status='queued',
         full_number=number,issue_date=datetime.now(ZoneInfo('America/Lima')).date(),
         payment_status='pending' if emission.payment_status == 'pending' else 'paid',created_by=emission.created_by,
-        details={'items':items,'customer_document_type':emission.document_type,'environment':raw['environment'],
+        details={'items':items,'customer_document_type':preference.get('customer_document_type') or emission.document_type,'environment':raw['environment'],
+                 'invoice_type_code':'01' if is_invoice else '03','customer_address':preference.get('customer_address',''),
+                 'customer_ubigeo':preference.get('customer_ubigeo',''),'due_date':preference.get('due_date'),
+                 'payment_terms':'Credito' if is_invoice and emission.payment_status=='pending' else 'Contado',
                  'issue_time':datetime.now(ZoneInfo('America/Lima')).strftime('%H:%M:%S'),
                  'issuer':{k:raw.get(k) for k in PUBLIC_FIELDS},'tax_amount':'0.00','unaffected_amount':str(emission.price),'files':{},'sunat_logs':[]})
     db.add(invoice)
     db.flush()
-    db.add(FiscalJob(invoice_id=invoice.id,environment=raw['environment'],series=raw['v2_series'],number=counter))
-    raw['v2_counter'] = counter
+    db.add(FiscalJob(invoice_id=invoice.id,environment=raw['environment'],series=series,number=counter))
+    raw[counter_key] = counter
     persist_config(row,raw)
     return invoice
 
@@ -144,20 +157,26 @@ def printable_pdf(invoice, digest):
     page = document.new_page()
     page.draw_rect(pymupdf.Rect(0,0,595,125),color=(.05,.35,.25),fill=(.05,.35,.25))
     page.insert_text((35,42),'ABISSOL',fontsize=23,color=(1,1,1))
-    page.insert_text((35,73),'BOLETA DE VENTA ELECTRONICA',fontsize=13,color=(1,1,1))
+    page.insert_text((35,73),'FACTURA ELECTRONICA' if invoice.document_type=='factura' else 'BOLETA DE VENTA ELECTRONICA',fontsize=13,color=(1,1,1))
     page.insert_text((35,101),invoice.full_number,fontsize=16,color=(1,1,1))
     lines = [config['company_name'],'RUC '+config['ruc'],config['address'],'',
              'Fecha: '+invoice.issue_date.isoformat(),'Titular: '+invoice.customer,'Documento: '+invoice.document_number,'Moneda: PEN / Soles','Cobro al generar este PDF: '+('Confirmado' if invoice.payment_status=='paid' else 'Pendiente'),'']
     for item in invoice.details['items']:
         lines.append(f"1 ZZ - {item['description']} - S/ {item['total']}")
     lines += ['', 'Operaciones inafectas: S/ '+str(sunat.money(invoice.total)), 'IGV: S/ 0.00', 'TOTAL: S/ '+str(sunat.money(invoice.total)), '',
-              sunat.amount_words(invoice.total), 'Representacion impresa de la boleta de venta electronica.', 'Consulta el estado SUNAT y el CDR en la plataforma ABISSOL.']
+              sunat.amount_words(invoice.total), 'Representacion impresa del comprobante electronico.', 'Consulta el estado SUNAT y el CDR en la plataforma ABISSOL.']
+    if invoice.document_type=='factura':
+        lines += ['Direccion del adquirente: '+invoice.details.get('customer_address',''), 'Forma de pago: '+invoice.details.get('payment_terms','Contado')]
+        if invoice.details.get('payment_terms')=='Credito':
+            lines += ['Cuota 001: S/ '+str(sunat.money(invoice.total))+' - Vence: '+str(invoice.details.get('due_date',''))]
     if invoice.details['environment'] != 'production':
         lines += ['PRUEBA BETA - SIN VALIDEZ TRIBUTARIA']
-    page.insert_textbox(pymupdf.Rect(35,150,560,595),'\n'.join(lines),fontsize=11,lineheight=1.5)
+    if page.insert_textbox(pymupdf.Rect(35,145,560,605),'\n'.join(lines),fontsize=10,lineheight=1.25)<0:
+        document.close()
+        raise sunat.FiscalError('El contenido del comprobante excede el formato PDF; requiere revisión.')
     series, number = invoice.full_number.split('-')
-    doc_type = {'DNI':'1','CE':'4','PASSPORT':'7'}[invoice.details['customer_document_type']]
-    qr = '|'.join([config['ruc'],'03',series,number,'0.00',str(sunat.money(invoice.total)),invoice.issue_date.isoformat(),doc_type,invoice.document_number,digest])
+    doc_type = {'DNI':'1','CE':'4','PASSPORT':'7','RUC':'6'}[invoice.details['customer_document_type']]
+    qr = '|'.join([config['ruc'],'01' if invoice.document_type=='factura' else '03',series,number,'0.00',str(sunat.money(invoice.total)),invoice.issue_date.isoformat(),doc_type,invoice.document_number,digest])
     output = io.BytesIO()
     qrcode.make(qr).save(output,format='PNG')
     page.insert_image(pymupdf.Rect(35,620,185,770),stream=output.getvalue())
@@ -173,6 +192,28 @@ def log_result(invoice, action, status, message=''):
     invoice.details = data
 
 
+def prepare_artifacts(db,invoice,job,raw):
+    config={**raw,**invoice.details['issuer'],'environment':job.environment}
+    config['v2_invoice_series' if invoice.document_type=='factura' else 'v2_series']=job.series
+    config['document_type_code']='01' if invoice.document_type=='factura' else '03'
+    if job.sent_at:
+        return config
+    key,cert=validate_configuration(db,config)
+    today=datetime.now(ZoneInfo('America/Lima')).date()
+    if not today-timedelta(days=1)<=invoice.issue_date<=today:
+        raise sunat.FiscalError('Comprobante sin enviar fuera de la ventana operativa de hoy/ayer: requiere revisión del programador.')
+    root=sunat.build_invoice(config,invoice,invoice.details['items'])
+    xml,digest=sunat.sign_xml(root,key,cert)
+    name=config['ruc']+'-'+config['document_type_code']+'-'+invoice.full_number
+    data=dict(invoice.details)
+    data['digest']=digest
+    data['files']={kind:write_artifact(invoice,kind,content) for kind,content in (
+        ('XML',xml),('ZIP',sunat.package_xml(name,xml)),('PDF',printable_pdf(invoice,digest)))}
+    invoice.details=data
+    invoice.status='generated'
+    return config
+
+
 def process_job(db, ident):
     job = db.query(FiscalJob).filter_by(id=ident).with_for_update().first()
     if not job or job.state in {'accepted','rejected','blocked'} or job.next_attempt_at > utc_now():
@@ -183,23 +224,14 @@ def process_job(db, ident):
     invoice = db.get(MedicalInvoice,job.invoice_id)
     # Snapshot public issuer/environment; current private credentials stay private.
     config = {**raw,**invoice.details['issuer'],'environment':job.environment}
-    config['v2_series'] = job.series
+    config['v2_invoice_series' if invoice.document_type=='factura' else 'v2_series'] = job.series
+    config['document_type_code']='01' if invoice.document_type=='factura' else '03'
     try:
-        key, cert = validate_configuration(db,config)
         if not job.sent_at:
-            today = datetime.now(ZoneInfo('America/Lima')).date()
-            # Allow a queued sale to cross midnight; never alter its original date.
-            if not today - timedelta(days=1) <= invoice.issue_date <= today:
-                raise sunat.FiscalError('Comprobante sin enviar fuera de la ventana operativa de hoy/ayer: requiere revisión del programador.')
-            root = sunat.build_invoice(config,invoice,invoice.details['items'])
-            xml, digest = sunat.sign_xml(root,key,cert)
-            name = config['ruc']+'-03-'+invoice.full_number
-            data = dict(invoice.details)
-            data['digest'] = digest
-            data['files'] = {kind:write_artifact(invoice,kind,content) for kind,content in (
-                ('XML',xml),('ZIP',sunat.package_xml(name,xml)),('PDF',printable_pdf(invoice,digest)))}
-            invoice.details = data
+            config=prepare_artifacts(db,invoice,job,raw)
+            name = config['ruc']+'-'+config['document_type_code']+'-'+invoice.full_number
             job.sent_at,job.state = utc_now(),'sending'
+            job.next_attempt_at = utc_now()+timedelta(minutes=5)
             job.attempts += 1
             invoice.status,invoice.sunat_status = 'generated','pending'
             log_result(invoice,'sendBill','pending')
@@ -207,6 +239,7 @@ def process_job(db, ident):
             content = sunat.send_bill(config,name,artifact_path(invoice,'ZIP').read_bytes())
         else:
             # No automatic resend after an uncertain response, including restarts.
+            job.next_attempt_at = utc_now()+timedelta(minutes=5)
             db.commit()
             content = sunat.query_cdr(config,invoice.full_number)
         result = sunat.cdr_result(content,invoice.full_number,config['ruc'])
@@ -224,6 +257,8 @@ def process_job(db, ident):
         safe = str(exc) if isinstance(exc,sunat.FiscalError) else 'No se pudo completar la conexión o generación fiscal. Revisar el servicio.'
         db.rollback()
         job = db.get(FiscalJob,ident)
+        if job.state in {'accepted','rejected'}:
+            return
         invoice = db.get(MedicalInvoice,job.invoice_id)
         job.state = 'uncertain' if job.sent_at else 'blocked'
         job.error, job.next_attempt_at = safe,utc_now()+timedelta(minutes=5)

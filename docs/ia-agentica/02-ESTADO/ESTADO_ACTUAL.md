@@ -1,5 +1,15 @@
 # Estado actual
 
+## Paridad de emisiones y conector ALP — 07/10/2026
+
+Boleta/factura elegida antes de emitir, correlativos separados, factura a crédito
+con vencimiento y consulta RUC automática. Reglas compartidas para emisión interna
+y externa: cobertura sin superposición, nombres separados y comisiones del emisor.
+Conector técnico aislado por origen y adaptador ALP preparado; ALP aún usa Laravel.
+Activación fiscal/corte pendientes de la elección de series. Liquidaciones muestran
+comisión y depósito diferenciados y bloquean cambios mientras calculan/guardan.
+Ver [comparación, pruebas y pendientes](../03-MODULOS/PARIDAD_E_INTEGRACION_ALP.md).
+
 ## Navegación consolidada y consultas — 06/10/2026
 
 Planes y Comunicaciones dejan de ser entradas del menú lateral: se accede desde

@@ -44,12 +44,37 @@ class ProfileInput(Payload):
     active: bool = True
     apply_role: bool = False
 
+class BillingPreference(Payload):
+    invoice_type_code: Literal["01","03"] = "03"
+    customer_document_type: Literal["RUC","DNI","CE","PASSPORT"] | None = None
+    customer_document_number: str = Field(default="",max_length=20,pattern=r"^[A-Za-z0-9]*$")
+    customer_name: str = Field(default="",max_length=180)
+    customer_address: str = Field(default="",max_length=250)
+    customer_ubigeo: str = Field(default="",pattern=r"^(\d{6})?$")
+    due_date: date | None = None
+
+    @model_validator(mode="after")
+    def receiver(self):
+        if self.invoice_type_code=="01" and (self.customer_document_type!='RUC' or len(self.customer_document_number)!=11 or not self.customer_document_number.isdigit() or len(self.customer_name)<2 or not self.customer_address or not self.customer_ubigeo):
+            raise ValueError("La factura requiere RUC, razón social, dirección y ubigeo del adquirente")
+        if self.invoice_type_code=='03' and (self.customer_document_number or self.customer_name or self.customer_document_type):
+            if not self.customer_document_type or not self.customer_name or not self.customer_document_number:
+                raise ValueError("Completa los datos del adquirente de la boleta")
+            expected={'DNI':8,'RUC':11}.get(self.customer_document_type)
+            if expected and (len(self.customer_document_number)!=expected or not self.customer_document_number.isdigit()):
+                raise ValueError("Documento del adquirente inválido")
+        return self
+
+
 class IssuanceInput(Payload):
     plan_id: int = Field(gt=0)
     emitter_id: int = Field(gt=0)
     document_type: Literal["DNI", "CE", "PASSPORT"] = "DNI"
     document_number: str = Field(min_length=6, max_length=20, pattern=r"^[A-Za-z0-9]+$")
     customer: Name
+    first_names: str = Field(default="", max_length=100)
+    paternal_surname: str = Field(default="", max_length=80)
+    maternal_surname: str = Field(default="", max_length=80)
     email: EmailStr | Literal[""] = ""
     phone: str = Field(default="", max_length=25, pattern=r"^[+0-9 ()-]*$")
     starts_on: date
@@ -57,8 +82,12 @@ class IssuanceInput(Payload):
     payment_status: Literal["pending", "collected_by_seller", "paid_to_abissol"] = "pending"
     external_source: str | None = Field(default=None, min_length=1, max_length=80)
     external_reference: str | None = Field(default=None, min_length=1, max_length=100)
+    billing: BillingPreference | None = None
     @model_validator(mode="after")
     def valid_document(self):
+        parts = [self.first_names, self.paternal_surname, self.maternal_surname]
+        if any(parts) and " ".join(p for p in parts if p).casefold() != self.customer.casefold():
+            raise ValueError("Los nombres y apellidos no coinciden con el titular")
         if self.document_type == "DNI" and (len(self.document_number) != 8 or not self.document_number.isdigit()):
             raise ValueError("El DNI debe tener ocho dígitos")
         if bool(self.external_source) != bool(self.external_reference):

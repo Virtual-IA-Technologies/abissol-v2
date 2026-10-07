@@ -46,7 +46,7 @@ class MedicalTests(unittest.TestCase):
             p = db.get(MedicalPlan, self.plan_id)
             p.price, p.validity_days = Decimal("60"), 30
             db.commit()
-        second = self.issuance()
+        second = self.issuance(document_number="87654321")
         self.assertNotEqual(first["code"], second["code"])
         self.assertEqual(second["price"], "60.00")
         self.assertEqual((datetime.fromisoformat(second["ends_on"]) - datetime.fromisoformat(second["starts_on"])).days, 29)

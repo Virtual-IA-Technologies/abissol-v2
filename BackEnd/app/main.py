@@ -78,6 +78,8 @@ PREFIX = "/abissol/api/v1"
 
 app.include_router(auth.router, prefix=PREFIX, tags=["ABISSOL · Sesiones"])
 from .routes import medical_workspaces
+from .routes import medical_integrations
+app.include_router(medical_integrations.router, prefix=PREFIX, tags=["ABISSOL · Integración externa"])
 app.include_router(medical_workspaces.router, prefix=PREFIX, tags=["ABISSOL · Pestañas comerciales"])
 app.include_router(medical.router, prefix=PREFIX, tags=["ABISSOL · Negocio"])
 

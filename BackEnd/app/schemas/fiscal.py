@@ -7,6 +7,7 @@ class BillingConfigurationInput(BaseModel):
     enabled: bool
     environment: Literal['beta','production']
     v2_series: str = Field(pattern=r'^B[A-Z0-9]{3}$')
+    v2_invoice_series: str = Field(default='',pattern=r'^(F[A-Z0-9]{3})?$')
     company_name: str = Field(min_length=3,max_length=180)
     trade_name: str = Field(max_length=180)
     ruc: str = Field(pattern=r'^\d{11}$')

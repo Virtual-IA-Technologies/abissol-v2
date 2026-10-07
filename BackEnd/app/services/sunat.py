@@ -94,7 +94,8 @@ def build_invoice(config, invoice, items):
     node(root, 'cbc:ID', invoice.full_number)
     node(root, 'cbc:IssueDate', invoice.issue_date.isoformat())
     node(root, 'cbc:IssueTime', invoice.details.get('issue_time','00:00:00'))
-    node(root, 'cbc:InvoiceTypeCode', '03', listID='0101', listAgencyName='PE:SUNAT', listName='Tipo de Documento', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01')
+    invoice_type='01' if getattr(invoice,'document_type','boleta')=='factura' else '03'
+    node(root, 'cbc:InvoiceTypeCode', invoice_type, listID='0101', listAgencyName='PE:SUNAT', listName='Tipo de Documento', listURI='urn:pe:gob:sunat:cpe:see:gem:catalogos:catalogo01')
     node(root, 'cbc:Note', amount_words(invoice.total), languageLocaleID='1000')
     node(root, 'cbc:DocumentCurrencyCode', 'PEN', listID='ISO 4217 Alpha', listAgencyName='United Nations Economic Commission for Europe', listName='Currency')
     signature = node(root, 'cac:Signature')
@@ -114,13 +115,28 @@ def build_invoice(config, invoice, items):
     node(node(address, 'cac:AddressLine'), 'cbc:Line', config['address'])
     node(node(address, 'cac:Country'), 'cbc:IdentificationCode', 'PE')
     party = node(node(root, 'cac:AccountingCustomerParty'), 'cac:Party')
-    doc_type = {'DNI':'1','CE':'4','PASSPORT':'7'}[invoice.details['customer_document_type']]
+    doc_type = {'DNI':'1','CE':'4','PASSPORT':'7','RUC':'6'}[invoice.details['customer_document_type']]
     node(node(party, 'cac:PartyIdentification'), 'cbc:ID', invoice.document_number, schemeID=doc_type, schemeName='Documento de Identidad', schemeAgencyName='PE:SUNAT')
-    node(node(party, 'cac:PartyLegalEntity'), 'cbc:RegistrationName', invoice.customer)
-    if getattr(invoice, 'payment_status', 'paid') == 'paid':
+    customer_legal=node(party, 'cac:PartyLegalEntity')
+    node(customer_legal, 'cbc:RegistrationName', invoice.customer)
+    if invoice.details.get('customer_address'):
+        address=node(customer_legal,'cac:RegistrationAddress')
+        if invoice.details.get('customer_ubigeo'):node(address,'cbc:ID',invoice.details['customer_ubigeo'])
+        node(node(address,'cac:AddressLine'),'cbc:Line',invoice.details['customer_address'])
+        node(node(address,'cac:Country'),'cbc:IdentificationCode','PE')
+    if invoice_type=='01' or getattr(invoice, 'payment_status', 'paid') == 'paid':
         terms = node(root, 'cac:PaymentTerms')
         node(terms, 'cbc:ID', 'FormaPago')
-        node(terms, 'cbc:PaymentMeansID', 'Contado')
+        credit=invoice_type=='01' and invoice.details.get('payment_terms')=='Credito'
+        node(terms, 'cbc:PaymentMeansID', 'Credito' if credit else 'Contado')
+        if credit:
+            if not invoice.details.get('due_date'):raise FiscalError('La factura a crédito necesita vencimiento.')
+            node(terms,'cbc:Amount',str(money(invoice.total)),currencyID='PEN')
+            installment=node(root,'cac:PaymentTerms')
+            node(installment,'cbc:ID','FormaPago')
+            node(installment,'cbc:PaymentMeansID','Cuota001')
+            node(installment,'cbc:Amount',str(money(invoice.total)),currencyID='PEN')
+            node(installment,'cbc:PaymentDueDate',invoice.details['due_date'])
     tax_total(root, invoice.total)
     legal = node(root, 'cac:LegalMonetaryTotal')
     for field in ('LineExtensionAmount','TaxInclusiveAmount','PayableAmount'):
@@ -224,7 +240,7 @@ def send_bill(config, name, content):
 
 def query_cdr(config, full_number):
     series, number = full_number.split('-')
-    root = soap(config,'getStatusCdr',{'rucComprobante':config['ruc'],'tipoComprobante':'03','serieComprobante':series,'numeroComprobante':str(int(number))})
+    root = soap(config,'getStatusCdr',{'rucComprobante':config['ruc'],'tipoComprobante':config.get('document_type_code','03'),'serieComprobante':series,'numeroComprobante':str(int(number))})
     result = root.xpath('//*[local-name()="content"]/text()')
     if not result:
         raise FiscalError('CDR aún no disponible. No se reenviará el comprobante automáticamente.')

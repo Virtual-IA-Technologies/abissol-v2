@@ -12,11 +12,14 @@ de definir serie exclusiva V2 para no colisionar con Laravel. Ver
 [Migración Laravel](docs/ia-agentica/03-MODULOS/MIGRACION_LARAVEL.md).
 
 Negocio: planes, red comercial, emisiones con carta/QR, comunicaciones salientes,
-liquidaciones, boletas automáticas al registrar programas y reportes. Sin OTP WhatsApp,
+liquidaciones, boletas o facturas automáticas según la elección al registrar programas y reportes. Sin OTP WhatsApp,
 bandeja de correo ni aprobaciones generales. Configuración fiscal exclusiva del
 Programador; envío productivo inicialmente desactivado hasta definir numeración. El historial
 importado conserva sus estados originales. Alcance y configuración
 en [Negocio ABISSOL](docs/ia-agentica/03-MODULOS/NEGOCIO_ABISSOL.md).
+
+La API de emisiones externas y el adaptador ALP están preparados; el corte desde
+Laravel sigue pendiente de definir series. Ver [comparación e integración ALP](docs/ia-agentica/03-MODULOS/PARIDAD_E_INTEGRACION_ALP.md).
 
 Conserva sesiones, usuarios, roles, permisos Wolverine, menús, auditoría, apariencia,
 calendario, notificaciones, documentos, documentación, búsqueda y componentes reutilizables.

@@ -119,7 +119,7 @@ class FiscalFlowTests(unittest.TestCase):
             invoice=db.query(MedicalInvoice).one()
             self.assertEqual(invoice.full_number,'BV02-1')
             self.assertEqual(invoice.total,Decimal('55'))
-        self.issuance()
+        self.issuance(document_number='87654321')
         with self.sessions() as db:self.assertEqual([j.number for j in db.query(FiscalJob).order_by(FiscalJob.id)],[1,2])
 
     def test_mismatched_price_rolls_back_sale_and_counter(self):
@@ -151,6 +151,44 @@ class FiscalFlowTests(unittest.TestCase):
             row.payment_status='collected_by_seller'
             self.assertIsNone(billing.enqueue_boleta(db,row))
             db.commit()
+            self.assertEqual(db.query(FiscalJob).count(),0)
+
+    def test_factura_credit_terms_and_independent_series(self):
+        self.enable()
+        from zoneinfo import ZoneInfo
+        due=(datetime.now(ZoneInfo('America/Lima')).date()+timedelta(days=30)).isoformat()
+        preference=dict(invoice_type_code='01',customer_document_type='RUC',customer_document_number='20100066603',customer_name='EMPRESA DE PRUEBA',customer_address='CALLE DE PRUEBA 123',customer_ubigeo='150101',due_date=due)
+        with self.sessions() as db:
+            cfg,raw=billing.configuration(db)
+            raw.update(v2_invoice_series='FV02',v2_invoice_counter=0)
+            billing.persist_config(cfg,raw)
+            db.commit()
+        self.issuance(billing=preference,payment_status='pending')
+        self.issuance(document_number='87654321')
+        with tempfile.TemporaryDirectory() as directory, patch.object(billing,'STORAGE',Path(directory)), patch.object(billing,'validate_configuration',return_value=certificate()), patch.object(sunat,'send_bill',return_value=cdr('FV02-1')) as send:
+            with self.sessions() as db:
+                invoice=db.query(MedicalInvoice).filter_by(document_type='factura').one()
+                self.assertEqual(invoice.full_number,'FV02-1')
+                self.assertEqual(db.query(MedicalInvoice).filter_by(document_type='boleta').one().full_number,'BV02-1')
+                job=db.query(FiscalJob).filter_by(invoice_id=invoice.id).one()
+                billing.process_job(db,job.id)
+                self.assertEqual(job.state,'accepted',job.error)
+                self.assertEqual(send.call_args.args[1],'20100066603-01-FV02-1')
+                xml=sunat.parse_xml(billing.artifact_path(invoice,'XML').read_bytes())
+                self.assertEqual(xml.findtext('cbc:InvoiceTypeCode',namespaces=sunat.NS),'01')
+                terms=xml.findall('cac:PaymentTerms',sunat.NS)
+                self.assertEqual([p.findtext('cbc:PaymentMeansID',namespaces=sunat.NS) for p in terms],['Credito','Cuota001'])
+                self.assertEqual(terms[1].findtext('cbc:PaymentDueDate',namespaces=sunat.NS),due)
+                self.assertTrue(billing.artifact_path(invoice,'PDF').read_bytes().startswith(b'%PDF'))
+                billing.process_job(db,job.id)
+                self.assertEqual(send.call_count,1)
+
+    def test_factura_requires_due_date_before_reserving_number(self):
+        self.enable()
+        payload=dict(plan_id=self.plan_id,emitter_id=self.profile_id,document_type='DNI',document_number='12345678',customer='PRUEBA',starts_on=(utc_now().date()+timedelta(days=2)).isoformat(),payment_status='pending',payment_method='cash',billing=dict(invoice_type_code='01',customer_document_type='RUC',customer_document_number='20100066603',customer_name='EMPRESA',customer_address='CALLE 123',customer_ubigeo='150101'))
+        self.post('/emissions',payload,422)
+        with self.sessions() as db:
+            self.assertEqual(db.query(MedicalIssuance).count(),0)
             self.assertEqual(db.query(FiscalJob).count(),0)
 
     def test_timeout_recovers_cdr_without_resending_or_renumbering(self):
@@ -194,7 +232,7 @@ class FiscalFlowTests(unittest.TestCase):
         today=datetime.now(ZoneInfo('America/Lima')).date()
         with tempfile.TemporaryDirectory() as directory, patch.object(billing,'STORAGE',Path(directory)), patch.object(billing,'validate_configuration',return_value=certificate()):
             for days,expected in [(1,'accepted'),(2,'blocked')]:
-                self.issuance()
+                self.issuance(document_number=f'1234567{days}')
                 with self.sessions() as db:
                     job=db.query(FiscalJob).order_by(FiscalJob.id.desc()).first()
                     invoice=db.get(MedicalInvoice,job.invoice_id)

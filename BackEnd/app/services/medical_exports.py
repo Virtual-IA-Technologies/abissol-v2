@@ -18,9 +18,9 @@ def meta_xlsx(emissions, db=None, *, monthly=False):
     rows = [headers]
     for e in emissions:
         original = originals.get(str(e.legacy_id), {})
-        name = original.get("contractor_name") or e.customer
-        paternal = original.get("contractor_paternal_last_name") or ""
-        maternal = original.get("contractor_maternal_last_name") or ""
+        name = e.first_names or original.get("contractor_name") or e.customer
+        paternal = e.paternal_surname or original.get("contractor_paternal_last_name") or ""
+        maternal = e.maternal_surname or original.get("contractor_maternal_last_name") or ""
         surnames = (paternal + " " + maternal).strip() or original.get("contractor_last_name") or ""
         if monthly:
             product = "PLUS" if "PLUS" in e.plan_name.upper() else "ESENCIAL" if "ESENCIAL" in e.plan_name.upper() else ""

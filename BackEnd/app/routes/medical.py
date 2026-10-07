@@ -5,8 +5,8 @@ import io
 import json
 import re
 import secrets
-from datetime import date, datetime, timedelta
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -307,31 +307,13 @@ def emissions(search: str = Query("", max_length=180), starts_on: date | None = 
 def create_emission(payload: IssuanceInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-emissions", "editor"))):
     if payload.payment_status == "paid_to_abissol" and not admin(user):
         raise HTTPException(403, "Administración debe confirmar los ingresos a ABISSOL")
-    today = datetime.now(ZoneInfo("America/Lima")).date()
-    if payload.starts_on <= today:
-        raise HTTPException(422, "La vigencia debe comenzar desde mañana (hora de Lima)")
     emitter = find(profiles_scope(db, user).filter(Profile.active.is_(True)), payload.emitter_id)
     if emitter.user_id is None:
         raise HTTPException(422, "Este participante es externo sin acceso al portal; sus emisiones deben ingresar por su integración")
     if payload.external_source or payload.external_reference:
         raise HTTPException(422, "El portal registra emisiones directas. La identidad de integración se valida por un conector externo autenticado")
-    if emitter.kind == "source_admin":
-        raise HTTPException(422, "Selecciona un responsable o emisor comercial")
-    find(db.query(Source).filter_by(active=True), emitter.source_id)
-    responsible = find(db.query(Profile).filter_by(active=True, kind="responsible", source_id=emitter.source_id), emitter.manager_id if emitter.kind == "emitter" else emitter.id)
-    plan = find(db.query(Plan).filter_by(active=True), payload.plan_id, True)
-    plan.counter += 1
-    values = payload.model_dump()
-    values.update(code=f"{plan.prefix}-{plan.counter:06d}", token=secrets.token_urlsafe(32),
-                  plan_name=plan.name, source_id=emitter.source_id, responsible_id=responsible.id,
-                  sale_date=today, ends_on=payload.starts_on + timedelta(days=plan.validity_days - 1),
-                  price=plan.price, provider_cost=plan.provider_cost, seller_commission=Decimal((responsible.commission_overrides or {}).get(str(plan.id), str(plan.seller_commission))),
-                  platform_fee=plan.platform_fee, meta_commission=(plan.provider_cost * plan.meta_percent / 100).quantize(Decimal('.01'), rounding=ROUND_HALF_UP), conditions_url=plan.conditions_url, created_by=user.id,
-                  paid_amount=plan.price if payload.payment_status != "pending" else Decimal(0))
-    row = Issuance(**values)
-    db.add(row)
-    db.flush()
-    fiscal.enqueue_boleta(db, row)
+    from ..services.medical_issuance import create_sale
+    row = create_sale(db, payload, emitter, user.id)
     return save(db, request, user, row)
 
 
@@ -646,10 +628,13 @@ def update_billing_configuration(payload: BillingConfigurationInput, request: Re
     row, raw = fiscal.configuration(db, lock=True)
     if not row:
         raise HTTPException(422,'Primero importa la configuración fiscal y su certificado.')
-    before = {k:raw.get(k) for k in (*fiscal.PUBLIC_FIELDS,'v2_series','enabled_in_v2')}
+    before = {k:raw.get(k) for k in (*fiscal.PUBLIC_FIELDS,'v2_series','v2_invoice_series','enabled_in_v2')}
     changes = payload.model_dump(exclude_unset=True)
-    if db.query(FiscalJob.id).first() and any(changes.get(k,raw.get(k)) != raw.get(k) for k in ('ruc','environment','v2_series')):
-        raise HTTPException(409,'Ya existen comprobantes V2: no se puede cambiar RUC, entorno o serie.')
+    if db.query(FiscalJob.id).first() and any(changes.get(k,raw.get(k)) != raw.get(k) for k in ('ruc','environment')):
+        raise HTTPException(409,'Ya existen comprobantes V2: no se puede cambiar RUC o entorno.')
+    for key,prefix in (('v2_series','B'),('v2_invoice_series','F')):
+        if changes.get(key,raw.get(key))!=raw.get(key) and db.query(FiscalJob.id).filter(FiscalJob.series.startswith(prefix)).first():
+            raise HTTPException(409,'La serie ya tiene comprobantes V2 y no se puede cambiar.')
     for key,value in changes.items():
         if key in {'sol_user','sol_password','certificate_password'} and not value:
             continue
@@ -753,7 +738,12 @@ def deliver(db, request, user, row, emission):
     body = insured_message(db, emission, row.channel, url)
     try:
         if row.channel == "email":
-            send_email(db, row.recipient, f"ABISSOL · {emission.code}", body, attachments=[(emission.code + ".pdf", letter_pdf(emission, url), "application/pdf")])
+            if emission.legacy_id:
+                original = legacy_data(db, 'medical_issuances', emission.legacy_id)
+                attachment = Path(legacy_download(db, original.get('welcome_letter_path')).path).read_bytes()
+            else:
+                attachment = letter_pdf(emission, url)
+            send_email(db, row.recipient, f"ABISSOL · {emission.code}", body, attachments=[(emission.code + ".pdf", attachment, "application/pdf")])
         else:
             send_whatsapp(db, row.recipient, body)
         row.status = "sent"
