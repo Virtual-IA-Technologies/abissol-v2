@@ -28,7 +28,8 @@ def render(html,qr,kind):
     buf=io.BytesIO();qrcode.make(qr).save(buf,format='PNG')
     html=html.replace('src="qr.png"','src="data:image/png;base64,'+base64.b64encode(buf.getvalue()).decode()+'"')
     renderer=Path(__file__).resolve().parents[2]/'pdf_renderer/render.php'
-    php=os.environ.get('ABISSOL_PHP_BIN') or shutil.which('php')
+    cpanel_php=Path('/opt/cpanel/ea-php82/root/usr/bin/php')
+    php=os.environ.get('ABISSOL_PHP_BIN') or (str(cpanel_php) if cpanel_php.is_file() else shutil.which('php'))
     if not php:raise RuntimeError('Falta PHP CLI para conservar el formato PDF original')
     command=[php,*(['-d','extension=gd'] if os.name=='nt' else []),str(renderer)]
     result=subprocess.run(command,input=json.dumps({'kind':kind,'html':html}).encode(),capture_output=True,timeout=30,

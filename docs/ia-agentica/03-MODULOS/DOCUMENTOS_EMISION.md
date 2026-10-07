@@ -42,6 +42,10 @@ lock; el servidor no requiere Composer ni descarga dependencias PHP. Antes de
 migrar o activar un release se ejecuta `scripts/check_pdf_runtime.py` con datos
 ficticios. La caché de impresión reside en storage privado.
 
+En cPanel se usa explícitamente `/opt/cpanel/ea-php82/root/usr/bin/php` cuando está
+instalado, porque el `php` del usuario del servicio puede seleccionar PHP 8.1.
+Esto no cambia la versión PHP de Laravel ni de otros sitios del servidor.
+
 Migración 0014 agrega invoice_id a medical_dispatches; no crea tablas nuevas.
 Consultas de envíos usan joins, las plantillas y logos se cachean en memoria y las
 descargas reutilizan archivos existentes. No se borran tablas ni documentos reales.
