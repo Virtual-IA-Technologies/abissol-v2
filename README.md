@@ -25,6 +25,9 @@ Documentos centraliza certificados, comprobantes, constancias y archivos META en
 carpetas automáticas, con permisos de su origen y originales versionados. Ver
 [Central de documentos](docs/ia-agentica/03-MODULOS/CENTRAL_DOCUMENTOS.md).
 
+Liquidaciones incorpora abonos, conciliación bancaria manual, comisiones y estado
+de cuenta por vendedor: [operación y controles](docs/ia-agentica/03-MODULOS/LIQUIDACIONES_VENDEDORES.md).
+
 Conserva sesiones, usuarios, roles, permisos Wolverine, menús, auditoría, apariencia,
 calendario, notificaciones, documentos, documentación, búsqueda y componentes reutilizables.
 No incluye Emisiones, Control, Siniestros, Contabilidad, facturación CAT, MTC,

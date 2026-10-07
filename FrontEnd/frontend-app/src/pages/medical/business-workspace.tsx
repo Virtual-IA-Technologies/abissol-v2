@@ -5,6 +5,7 @@ import { UnderlineTabs } from "@/components/underline-tabs";
 import { useAuth } from "@/context/AuthContext";
 import { BusinessConfiguration } from "./business-configuration";
 import { MetaDispatches } from "./business-workspace-panels";
+import { SellerStatements } from './seller-statements';
 
 export type SectionProps = { section: string; embedded?: boolean; liquidationKind?: string; history?: boolean };
 
@@ -23,6 +24,7 @@ export function BusinessWorkspace({ section, renderSection }: { section: string;
     ...(programmer ? [{ value:"settings", label:"Configuración", icon:icon(Settings2) }] : []),
   ] : [
     { value:"list", label:"Liquidaciones", icon:icon(Wallet) },
+    { value:"accounts", label:"Estado de cuenta", icon:icon(Users) },
     ...(global ? [{ value:"meta", label:"Liquidaciones mensuales", icon:icon(CalendarDays) }, { value:"platform", label:"Liquidación plataforma", icon:icon(Building2) }] : []),
     { value:"history", label:"Historial", icon:icon(History) },
   ];
@@ -33,7 +35,7 @@ export function BusinessWorkspace({ section, renderSection }: { section: string;
     <div><p className="text-xs font-medium uppercase tracking-widest text-emerald-600">Negocio ABISSOL</p><h1 className="mt-1 text-2xl font-semibold">{section === "emissions" ? "Emisiones" : "Liquidaciones"}</h1></div>
     <UnderlineTabs label={section === "emissions" ? "Secciones de emisiones" : "Secciones de liquidaciones"} value={tab} onChange={change} tabs={tabs}>
       {section === "emissions" ? tab === "meta" ? <MetaDispatches /> : tab === "settings" ? <BusinessConfiguration /> : renderSection({ section: tab === "list" ? "emissions" : tab, embedded:true })
-        : renderSection({ section:"liquidations", embedded:true, liquidationKind: tab === "history" ? undefined : tab === "list" ? "seller" : tab, history:tab === "history" })}
+        : tab === 'accounts' ? <SellerStatements/> : renderSection({ section:"liquidations", embedded:true, liquidationKind: tab === "history" ? undefined : tab === "list" ? "seller" : tab, history:tab === "history" })}
     </UnderlineTabs>
   </main>;
 }

@@ -7,6 +7,7 @@ import { BillingHistory } from "./billing-history";
 import { UnderlineTabs } from "@/components/underline-tabs";
 import { BillingConfiguration } from "./billing-configuration";
 import { BusinessWorkspace, type SectionProps } from "./business-workspace";
+import { LiquidationDetail, type SettlementDetail } from "./liquidation-detail";
 import { LiquidationBuilder } from "./business-workspace-panels";
 import { EmissionForm } from "./emission-form";
 import { useAuth } from "@/context/AuthContext";
@@ -21,7 +22,6 @@ type Field = { name: string; label: string; type?: string; options?: Option[]; o
 type Lookup = { plans: Row[]; sources: Row[]; profiles: Row[]; users: { id: number; name: string; is_active: boolean; roles: string[] }[]; emissions: Row[]; global_access: boolean; can_configure_billing?: boolean; can_configure_communications?: boolean; fiscal_enabled?: boolean };
 type Listing = { summary?: Record<string, number>; items: Row[]; total: number; count?: number; sales?: string; collected?: string; pending?: string; commissions?: string; provider_cost?: string };
 type Detail = Row & { items?: never; vouchers?: never };
-type LiquidationDetail = { legacy_id?: number | null; items: Row[]; vouchers: Row[]; voucher_total: string; deposit_required: string; status: string };
 type Modal = { title: string; path: string; method?: "post" | "put"; fields: Field[]; initial?: Row; description?: string };
 const empty: Lookup = { plans: [], sources: [], profiles: [], users: [], emissions: [], global_access: false };
 const titles: Record<string, string> = { plans: "Planes de asistencia", network: "Red comercial", emissions: "Emisiones", dispatches: "Comunicaciones", liquidations: "Liquidaciones", billing: "Facturación", reports: "Reportes comerciales" };
@@ -64,12 +64,14 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
   const [end, setEnd] = useState("");
   const [page, setPage] = useState(0);
   const [modal, setModal] = useState<Modal | null>(null);
-  const [detail, setDetail] = useState<LiquidationDetail | null>(null);
+  const [detail, setDetail] = useState<SettlementDetail | null>(null);
   const [billingTab, setBillingTab] = useState("documents");
   const [invoiceId, setInvoiceId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const requestVersion = useRef(0);
   const referencesCache = useRef<Lookup | null>(null);
+  const referencesPending = useRef<Promise<Lookup> | null>(null);
+  const listingPending = useRef<{key:string;promise:Promise<{data:Listing}>}|null>(null);
   const serverQuery = section === "plans" || section === "network" ? "" : query;
   const editor = !history && can(`medical-${section}`, "editor");
   const manager = !history && can(`medical-${section}`, "gestor");
@@ -79,9 +81,18 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     setLoading(true); setError("");
     try {
       const params = { offset: page * 25, limit: 25, kind: liquidationKind, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined };
-      if (refreshReferences) referencesCache.current = null;
-      const referencesPromise = referencesCache.current ? Promise.resolve(referencesCache.current) : api.get<Lookup>("/medical/lookups", { params: { section } }).then(r => r.data);
-      const [list, references] = await Promise.all([section === "network" ? referencesPromise.then(refs => ({ data: { items: refs.profiles, total: refs.profiles.length } as Listing })) : api.get<Listing>(`/medical/${section}`, { params }), referencesPromise]);
+      if (refreshReferences) { referencesCache.current = null; referencesPending.current = null; }
+      if (!referencesCache.current && !referencesPending.current) {
+        const request = api.get<Lookup>("/medical/lookups", { params: { section } }).then(r => r.data).finally(() => { if (referencesPending.current === request) referencesPending.current = null; });
+        referencesPending.current = request;
+      }
+      const referencesPromise = referencesCache.current ? Promise.resolve(referencesCache.current) : referencesPending.current!;
+      const key = JSON.stringify([section,params]);
+      if (section !== 'network' && listingPending.current?.key !== key) {
+        const promise = api.get<Listing>(`/medical/${section}`, { params }).finally(() => { if (listingPending.current?.promise === promise) listingPending.current = null; });
+        listingPending.current = {key,promise};
+      }
+      const [list, references] = await Promise.all([section === "network" ? referencesPromise.then(refs => ({ data: { items: refs.profiles, total: refs.profiles.length } as Listing })) : listingPending.current!.promise, referencesPromise]);
       if (version === requestVersion.current) { referencesCache.current = references; setData(list.data); setLookup(references); }
 
     } catch (e) { if (version === requestVersion.current) setError(errorText(e)); }
@@ -139,15 +150,14 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     catch (e) { setError(errorText(e)); }
   }
   async function showDetail(row: Row) {
-    try { setDetail((await api.get<LiquidationDetail>(`/medical/liquidations/${row.id}`)).data); } catch (e) { setError(errorText(e)); }
+    try { setDetail((await api.get<SettlementDetail>(`/medical/liquidations/${row.id}`)).data); } catch (e) { setError(errorText(e)); }
   }
-  const action = (row: Row, name: string, title: string) => setModal({ title, path: `/liquidations/${row.id}/${name}`, fields: [reason], description: "Esta acción modifica el estado de la liquidación y queda registrada en auditoría." });
   const columns: Record<string, [string, (r: Row) => string][]> = {
     plans: [["Plan", r => `${r.code} · ${r.name}`], ["Precio", r => money(r.price)], ["Proveedor", r => money(r.provider_cost)], ["Vendedor", r => money(r.seller_commission)], ["Vigencia", r => `${r.validity_days} días`], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     network: [["Participante", r => String(r.display_name || userName(r.user_id))], ["Acceso al portal", r => r.user_id ? userName(r.user_id) : "Sin cuenta ABISSOL"], ["Roles de acceso", r => r.user_id ? (lookup.users.find(u => u.id === Number(r.user_id))?.roles || []).join(", ") || "Sin rol activo" : "Sin acceso al portal"], ["ID externo", r => String(r.external_user_id || "—")], ["Función", r => labels[String(r.kind)]], ["Origen", r => String(lookup.sources.find(s => s.id === r.source_id)?.name || r.source_id)], ["Responsable", r => r.manager_id ? profileName(r.manager_id) : "—"], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     emissions: [["Certificado", r => String(r.code)], ["Canal / emisor", r => `${r.external_source ? `Externa · ${r.external_source}` : "Interna · ABISSOL"} · ${profileName(r.emitter_id)}`], ["Titular", r => `${r.customer} · ${r.document_number}`], ["Plan", r => String(r.plan_name)], ["Vigencia", r => `${r.starts_on} → ${r.ends_on}`], ["Importe", r => money(r.price)], ["Estado", r => `${labels[String(r.status)]} · ${labels[String(r.payment_status)]}`]],
     dispatches: [["Emisión", r => String(r.issuance_code || r.liquidation_code || (r.liquidation_id ? `Liquidación #${r.liquidation_id}` : "Envío general"))], ["Canal", r => labels[String(r.channel)]], ["Destinatario", r => String(r.recipient)], ["Estado", r => labels[String(r.status)] || String(r.status)], ["Intentos", r => String(r.attempts)], ["Detalle", r => String(r.error || "—")]],
-    liquidations: [["Número", r => String(r.code || `LIQ-${r.id}`)], ["Tipo", r => labels[String(r.kind)]], ["Responsable", r => profileName(r.responsible_id)], ["Período", r => `${r.starts_on} → ${r.ends_on}`], ["Ventas", r => money(r.sales_total)], ["Comisión / proveedor", r => money(r.commission_total)], ["Depósito", r => money(r.deposit_required)], ["Estado", r => labels[String(r.status)] || String(r.status)]],
+    liquidations: [["Número", r => String(r.code || `LIQ-${r.id}`)], ["Tipo", r => labels[String(r.kind)]], ["Responsable", r => profileName(r.responsible_id)], ["Período", r => `${r.starts_on} → ${r.ends_on}`], ["Ventas", r => money(r.sales_total)], ["Comisión / proveedor", r => money(r.commission_total)], ["Depósito", r => money(r.deposit_required)], ["Saldo", r => r.legacy_id ? "Histórico" : money(r.balance_due)], ["Comisión pendiente", r => r.legacy_id || r.kind !== "seller" ? "—" : money(r.commission_due)], ["Estado", r => labels[String(r.status)] || String(r.status)]],
     billing: [["Comprobante", r => String(r.full_number || `BOR-${r.id}`)], ["Tipo", r => labels[String(r.document_type)] || String(r.document_type)], ["Cliente", r => String(r.customer)], ["Documento", r => String(r.document_number)], ["Total", r => money(r.total)], ["Estado fiscal", r => `${r.fiscal_environment === "beta" ? "PRUEBA BETA · " : ""}${labels[String(r.sunat_status)] || String(r.sunat_status)}`], ["Estado", r => r.deleted_at ? "Archivado" : labels[String(r.status)] || String(r.status)]],
     reports: [["Plan", r => String(r.plan)], ["Emisiones", r => String(r.count)], ["Ventas", r => money(r.sales)]],
   };
@@ -187,15 +197,15 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
         {section === "billing" && editor && !r.legacy_id && r.status === "draft" && <Button size="sm" variant="outline" onClick={() => invoiceForm(r)}>Corregir</Button>}
         {section === "dispatches" && editor && !r.legacy_id && !["meta_daily_report", "metafin_monthly"].includes(String(r.kind)) && r.status === "failed" && <Button size="sm" variant="outline" onClick={() => setModal({ title: "Reintentar envío", path: `/dispatches/${r.id}/retry`, fields: [], description: "Comprueba antes el proveedor: si el intento anterior sí llegó, un nuevo envío duplicará el mensaje." })}>Reintentar</Button>}
         {section === "liquidations" && r.kind === "meta" && r.status !== "cancelled" && <><Button size="sm" variant="outline" onClick={() => void download(`/liquidations/${r.id}/meta-file/xlsx`, `${r.code || r.id}.xlsx`)}>Excel META</Button><Button size="sm" variant="outline" onClick={() => void download(`/liquidations/${r.id}/meta-file/letter`, `carta-${r.code || r.id}.pdf`)}>Carta META</Button>{editor && lookup.global_access && <Button size="sm" variant="outline" onClick={() => setModal({title:"Enviar altas mensuales a META",path:`/liquidations/${r.id}/meta-send`,fields:[{name:"force",label:"Autorizar reenvío si ya existen intentos previos",type:"checkbox",optional:true}],description:"Se enviará un correo real al destinatario META configurado, con el Excel de altas y la carta mensual. Comprueba la recepción antes de autorizar un reenvío."})}>Enviar a META</Button>}</>}
-        {section === "liquidations" && <><Button size="sm" variant="outline" onClick={() => void showDetail(r)}>Detalle</Button>{editor && r.kind !== "meta" && ["draft", "observed"].includes(String(r.status)) && <><Button size="sm" variant="outline" onClick={() => setModal({ title: "Adjuntar comprobante", path: `/liquidations/${r.id}/vouchers`, fields: [{ name: "reference", label: "Referencia bancaria única" }, { name: "amount", label: "Importe S/", type: "money" }, { name: "paid_on", label: "Fecha del depósito", type: "date" }, { name: "file", label: "PDF, PNG o JPEG (máximo 5 MB)", type: "file" }] })}>Comprobante</Button><Button size="sm" variant="outline" onClick={() => action(r, "submit", "Presentar liquidación")}>Presentar</Button><Button size="sm" variant="outline" onClick={() => action(r, "cancel", "Cancelar liquidación")}>Cancelar</Button></>}{manager && r.kind !== "meta" && lookup.global_access && r.status === "submitted" && <><Button size="sm" onClick={() => action(r, "approve", "Aprobar conciliación")}>Aprobar</Button><Button size="sm" variant="outline" onClick={() => action(r, "observe", "Observar liquidación")}>Observar</Button></>}{manager && r.kind !== "meta" && lookup.global_access && r.status === "approved" && <Button size="sm" onClick={() => action(r, "pay", "Confirmar cierre y pago")}>Cerrar y pagar</Button>}</>}
+        {section === "liquidations" && <Button size="sm" variant="outline" onClick={() => void showDetail(r)}>Detalle y conciliación</Button>}
       </div></td>}</tr>)}</tbody></table></div>
       <footer className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"><span>{data.total} registros · {section === "plans" || section === "network" || section === "reports" ? "Listado completo" : `Página ${page + 1}`}</span>{!["plans", "network", "reports"].includes(section) && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={(page + 1) * 25 >= data.total || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button></div>}</footer>
     </section>
     {invoiceId !== null && <BillingHistory key={invoiceId} id={invoiceId} close={() => setInvoiceId(null)} download={download} />}
-    {modal?.path === "/liquidations" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(); }} />}
-    {modal?.path === "/emissions" && <EmissionForm plans={lookup.plans.filter(p => p.active)} emitters={profileOptions()} globalAccess={lookup.global_access} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Emisión registrada correctamente."); await load(); }} />}
-    {modal && modal.path !== "/emissions" && modal.path !== "/liquidations" && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(["failed", "uncertain"].includes(String(result.status)) ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(); }} />}
-    <Dialog open={!!detail} onOpenChange={open => { if (!open) setDetail(null); }}><DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl"><DialogHeader><DialogTitle>Detalle de liquidación</DialogTitle><DialogDescription>{detail?.legacy_id ? "Liquidación importada: consulta de la conciliación original, sin modificar sus estados históricos." : "Importes conservados al preparar el período."}</DialogDescription></DialogHeader>{detail && <div className="space-y-4"><p>Depósito requerido: <strong>{money(detail.deposit_required)}</strong> · Adjuntado: <strong>{money(detail.voucher_total)}</strong></p><h3 className="font-medium">Emisiones incluidas</h3>{detail.items.map(i => <div key={String(i.id)} className="flex justify-between border-b py-2 text-sm"><span>{String(i.code || `Emisión #${i.issuance_id}`)} · {String(i.customer || "")}</span><span>Venta {money(i.sale)} · Comisión {money(i.commission)} · Depósito {money(i.deposit)}</span></div>)}<h3 className="font-medium">Comprobantes</h3>{detail.vouchers.length ? detail.vouchers.map(v => <div key={String(v.id)} className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => void download(`/vouchers/${v.id}/file`, String(v.filename))}>{String(v.reference)} · {money(v.amount)} <Download className="size-4" /></Button>{editor && ["draft", "observed"].includes(detail.status) && <Button variant="outline" onClick={() => { setDetail(null); setModal({ title: "Retirar comprobante", path: `/vouchers/${v.id}/void`, fields: [reason], description: "Se conserva el archivo y su auditoría. Podrás adjuntar el comprobante correcto." }); }}>Retirar</Button>}</div>) : <p className="text-sm text-muted-foreground">Sin comprobantes adjuntos.</p>}</div>}</DialogContent></Dialog>
+    {modal?.path === "/liquidations" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(section!=="liquidations"); }} />}
+    {modal?.path === "/emissions" && <EmissionForm plans={lookup.plans.filter(p => p.active)} emitters={profileOptions()} globalAccess={lookup.global_access} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Emisión registrada correctamente."); await load(section!=="liquidations"); }} />}
+    {modal && modal.path !== "/emissions" && modal.path !== "/liquidations" && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(["failed", "uncertain"].includes(String(result.status)) ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(section!=="liquidations"); }} />}
+    {detail&&<LiquidationDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} editor={editor} manager={manager&&lookup.global_access}/>}
     </>}
     </UnderlineTabs>
   </section>;

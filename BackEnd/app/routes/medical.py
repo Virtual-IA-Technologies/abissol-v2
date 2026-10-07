@@ -33,6 +33,7 @@ from ..services.email import send_email
 from ..services.whatsapp import send_whatsapp
 from ..services.commercial_roles import seed_commercial_roles, ROLE_NAMES
 from ..services import medical_billing as fiscal
+from ..services import medical_reconciliation as reconciliation
 from ..services.sunat import FiscalError
 from ..models.fiscal import FiscalJob
 from ..schemas.fiscal import BillingConfigurationInput
@@ -102,6 +103,8 @@ def save(db, request, user, row, before=None):
         from ..services import medical_documents as archive
         if isinstance(row,Issuance):archive.emission(db,row,user.id)
         if isinstance(row,Voucher):archive.voucher(db,row,user.id)
+        if isinstance(row,Liquidation) and row.status=='paid' and before and before.get('status')!='paid':
+            archive.closing_receipt(db,row,user.id)
         if isinstance(row,Liquidation) and row.kind=='meta' and before is None:
             entries=db.query(Issuance).join(Item,Item.issuance_id==Issuance.id).filter(Item.liquidation_id==row.id).order_by(Issuance.id).all()
             if entries:archive.monthly(db,row,entries,user.id)
@@ -110,6 +113,9 @@ def save(db, request, user, row, before=None):
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "El código, referencia o registro ya existe; actualiza la lista") from exc
+    except Exception:
+        db.rollback()
+        raise
     return dump(row)
 
 
@@ -466,7 +472,14 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
     if search: query = query.filter(or_(Liquidation.code.contains(search), Liquidation.notes.contains(search)))
     if starts_on: query = query.filter(Liquidation.ends_on >= starts_on)
     if ends_on: query = query.filter(Liquidation.starts_on <= ends_on)
-    return page(query, offset, limit)
+    result=page(query, offset, limit)
+    ids=[r['id'] for r in result['items']]
+    totals={r.liquidation_id:dict(r._mapping) for r in db.query(Voucher.liquidation_id,*reconciliation.aggregate()).filter(Voucher.liquidation_id.in_(ids),Voucher.active.is_(True)).group_by(Voucher.liquidation_id)} if ids else {}
+    from types import SimpleNamespace
+    for item in result['items']:
+        row=SimpleNamespace(**{**item,'deposit_required':Decimal(item['deposit_required']),'commission_total':Decimal(item['commission_total'])})
+        item.update(reconciliation.balance(row,totals.get(item['id'],{})))
+    return result
 
 
 @router.post("/liquidations/preview")
@@ -507,49 +520,32 @@ def liquidation_detail(ident: int, db: Session = Depends(get_db), user=Depends(r
     result = dump(row)
     result["items"] = [{**dump(i), "code": e.code, "customer": e.customer, "document_number": e.document_number, "plan_name": e.plan_name} for i, e in db.query(Item, Issuance).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == ident)]
     result["vouchers"] = [{k: v for k, v in dump(i).items() if k not in {"storage_key", "digest", "active_digest", "active_reference"}} for i in db.query(Voucher).filter_by(liquidation_id=ident, active=True)]
-    result["voucher_total"] = str(db.query(func.coalesce(func.sum(Voucher.amount), 0)).filter_by(liquidation_id=ident, active=True).scalar())
+    values={}
+    for voucher in result['vouchers']:
+        key=voucher['purpose']+('_verified' if voucher['verified_at'] else '_pending')
+        values[key]=values.get(key,Decimal(0))+Decimal(voucher['amount'])
+    result.update(reconciliation.balance(row,values))
+    result['voucher_total']=result['deposit_registered']
     return result
 
 
 @router.post("/liquidations/{ident}/vouchers")
-async def add_voucher(ident: int, request: Request, reference: str = Form(..., min_length=3, max_length=100), amount: Decimal = Form(..., gt=0, max_digits=12, decimal_places=2), paid_on: date = Form(...), file: UploadFile = File(...), db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
+async def add_voucher(ident: int, request: Request, reference: str = Form(..., min_length=3, max_length=100), amount: Decimal = Form(..., gt=0, max_digits=12, decimal_places=2), paid_on: date = Form(...), file: UploadFile = File(...), bank: str = Form('', max_length=80), account: str = Form('', max_length=34), purpose: str = Form('deposit', max_length=24), note: str = Form('', max_length=1000), db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
     row = find(liquidation_scope(db, user), ident, True)
-    if row.status not in {"draft", "observed"}:
-        raise HTTPException(409, "Los comprobantes solo se cargan antes de presentar la liquidación")
-    if len(reference.strip()) < 3:
-        raise HTTPException(422, "La referencia debe tener al menos tres caracteres")
-    if paid_on > datetime.now(ZoneInfo("America/Lima")).date():
-        raise HTTPException(422, "La fecha del comprobante no puede estar en el futuro")
-    content = await file.read(5 * 1024 * 1024 + 1)
-    if len(content) > 5 * 1024 * 1024:
-        raise HTTPException(413, "Máximo 5 MB por comprobante")
-    suffix = ".pdf" if content.startswith(b"%PDF-") else ".png" if content.startswith(b"\x89PNG\r\n\x1a\n") else ".jpg" if content.startswith(b"\xff\xd8\xff") else None
-    if not suffix:
-        raise HTTPException(422, "Adjunta un PDF o imagen PNG/JPEG")
-    digest = hashlib.sha256(content).hexdigest()
-    # Los comprobantes heredados pueden compartir referencias entre sí. También
-    # deben bloquear su reutilización en liquidaciones nuevas de V2.
-    if db.query(Voucher.id).filter(Voucher.active.is_(True), or_(func.upper(Voucher.reference) == reference.strip().upper(), Voucher.digest == digest)).first():
-        raise HTTPException(409, "La referencia o archivo ya pertenece a un comprobante activo")
-    STORAGE.mkdir(parents=True, exist_ok=True)
-    key = secrets.token_hex(24) + suffix
-    target = STORAGE / key
-    target.write_bytes(content)
-    try:
-        result = save(db, request, user, Voucher(liquidation_id=ident, reference=reference.strip(), active_reference=reference.strip().upper(), amount=amount, paid_on=paid_on,
-            filename=Path(file.filename or "comprobante").name[:180], storage_key=key, digest=digest, active_digest=digest))
-    except Exception:
-        target.unlink(missing_ok=True)
-        raise
-    return {k: v for k, v in result.items() if k not in {"storage_key", "digest", "active_digest", "active_reference"}}
+    return await reconciliation.register(db,request,user,row,reference,amount,paid_on,file,bank,account,purpose,note)
 
 
 @router.post("/vouchers/{ident}/void")
 def void_voucher(ident: int, payload: ReasonInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
     row = find(db.query(Voucher).filter_by(active=True), ident)
     liquidation = find(liquidation_scope(db, user), row.liquidation_id, True)
-    if liquidation.status not in {"draft", "observed"}:
-        raise HTTPException(409, "El comprobante ya forma parte de una conciliación presentada")
+    reconciliation.require_current(liquidation)
+    db.refresh(row)
+    if not row.active:raise HTTPException(409,'El movimiento ya fue retirado')
+    if row.verified_at or row.purpose!='deposit':
+        ensure_option_access(db,user,'medical-liquidations','gestor');global_only(user)
+    if liquidation.status=='cancelled' or (liquidation.status=='paid' and (row.purpose!='commission_payment' or row.verified_at)):
+        raise HTTPException(409,'Una liquidación cerrada conserva sus movimientos; requiere ajuste posterior')
     before = dump(row)
     row.active, row.active_digest, row.active_reference = False, None, None
     audit_change(db, request, user, "medical_voucher_void", row.id, after={"reason": payload.reason}, module="abissol_medical")
@@ -580,10 +576,11 @@ def liquidation_action(ident: int, action: str, payload: ReasonInput, request: R
     if action in {"approve", "observe", "pay"}:
         ensure_option_access(db, user, "medical-liquidations", "gestor")
         global_only(user)
-    if action in {"submit", "approve", "pay"}:
-        total = db.query(func.coalesce(func.sum(Voucher.amount), 0)).filter_by(liquidation_id=ident, active=True).scalar()
-        if total != row.deposit_required:
-            raise HTTPException(422, f"Los comprobantes suman {total}; se requiere {row.deposit_required}")
+    amounts=reconciliation.balance(row,reconciliation.totals(db,ident))
+    if action=='pay' and (Decimal(amounts['balance_due'])!=0 or Decimal(amounts['pending_verification'])!=0):
+        raise HTTPException(422,'Para cerrar, concilia todos los movimientos y completa el saldo del depósito')
+    if action=='cancel' and db.query(Voucher.id).filter_by(liquidation_id=ident,active=True).first():
+        raise HTTPException(409,'Retira y revisa los movimientos antes de cancelar; no se liberan depósitos automáticamente')
     row.status, row.notes = transitions[action][1], payload.reason
     if action == "cancel":
         db.query(Item).filter_by(liquidation_id=ident).update({"active_key": None})

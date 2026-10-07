@@ -143,7 +143,7 @@ def voucher(db,row,actor):
     liquidation=db.get(m.Liquidation,row.liquidation_id)
     archive(db,source='liquidation',ident=liquidation.id,key='voucher:'+str(row.id),actor=actor,
         path=record_path('liquidation',liquidation,liquidation.starts_on),filename=row.filename,
-        file_path=m.STORAGE/row.storage_key,expected_hash=row.digest,description='Constancia de depósito · '+row.reference)
+        file_path=m.STORAGE/row.storage_key,expected_hash=row.digest,description={'deposit':'Constancia de depósito','commission_payment':'Pago de comisión','commission_offset':'Acuerdo de compensación'}.get(row.purpose,'Constancia')+' · '+row.reference)
 
 
 def monthly(db,row,emissions,actor):
@@ -154,6 +154,18 @@ def monthly(db,row,emissions,actor):
         if not binding(db,'liquidation',row.id,key):
             archive(db,source='liquidation',ident=row.id,key=key,actor=actor,path=record_path('liquidation',row,row.starts_on),
                 filename=(row.code or str(row.id))+'-'+key+extension,content=generate(),description='Documentación mensual META')
+
+
+def closing_receipt(db,row,actor):
+    import pymupdf as fitz
+    from .medical_reconciliation import balance,totals
+    values=balance(row,totals(db,row.id))
+    with fitz.open() as document:
+        page=document.new_page()
+        page.insert_text((45,60),'ABISSOL - Constancia de cierre',fontsize=18)
+        text=f"Liquidacion: {row.code}\nPeriodo: {row.starts_on} a {row.ends_on}\nVentas: S/ {row.sales_total}\nDeposito requerido: S/ {row.deposit_required}\nDepositos conciliados: S/ {values['deposit_verified']}\nComision compensada: S/ {values['commission_offset']}\nSaldo por depositar: S/ {values['balance_due']}\nComision pagada: S/ {values['commission_paid']}\nComision pendiente al cierre: S/ {values['commission_due']}\n\nEsta constancia acredita la conciliacion de la liquidacion.\nEl cierre no acredita por si solo el pago de comisiones.\nLos pagos posteriores se consultan en el estado de cuenta."
+        page.insert_textbox(fitz.Rect(45,100,550,700),text,fontsize=12,lineheight=1.6)
+        archive(db,source='liquidation',ident=row.id,key='closing-receipt',actor=actor,path=record_path('liquidation',row,row.starts_on),filename=row.code+'-cierre.pdf',content=document.tobytes(),description='Constancia de cierre conciliado')
 
 
 def plan(db,row,actor):

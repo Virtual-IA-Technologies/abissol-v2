@@ -1,5 +1,13 @@
 # Estado actual
 
+## Liquidaciones de vendedores — 07/10/2026
+
+Abonos parciales, identidad bancaria completa, conciliación administrativa,
+compensaciones y pagos de comisión separados del cierre. Estado de cuenta paginado
+por vendedor; constancia de cierre archivada automáticamente. Consultas agrupadas,
+catálogos reutilizados e históricos de consulta. Migración 0013 amplía constancias
+existentes sin crear tablas. Ver [flujo, controles y límites](../03-MODULOS/LIQUIDACIONES_VENDEDORES.md).
+
 ## Central documental por carpetas — 07/10/2026
 
 Documentos reúne archivos personales y documentos automáticos de Emisiones,

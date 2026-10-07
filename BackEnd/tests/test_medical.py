@@ -86,22 +86,22 @@ class MedicalTests(unittest.TestCase):
         self.assertEqual(liq["deposit_required"], "55.00")
         self.post("/liquidations", period, 422)
         self.post(f'/liquidations/{liq["id"]}/approve', {"reason": "Aprobar prueba"}, 409)
-        self.post(f'/liquidations/{liq["id"]}/submit', {"reason": "Presentar prueba"}, 422)
         with TemporaryDirectory() as directory, patch("app.routes.medical.STORAGE", Path(directory)):
-            response = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"reference": "TEST-001", "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", b"%PDF-1.7 prueba", "application/pdf")}, headers=self.headers)
+            response = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"bank":"BCP","account":"123456789","note":"Depósito de prueba", "reference": "TEST-001", "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", b"%PDF-1.7 prueba", "application/pdf")}, headers=self.headers)
             self.assertEqual(response.status_code, 200, response.text)
             self.assertNotIn("storage_key", response.json())
             voucher_id = response.json()["id"]
             with self.sessions() as db:
                 legacy = db.get(MedicalVoucher, voucher_id)
-                legacy.active_reference = legacy.active_digest = None
+                legacy.active_reference = legacy.active_digest = legacy.bank = legacy.account = None
                 db.commit()
             for reference, content in [('test-001', b'%PDF-1.7 otro'), ('NEW-REF', b'%PDF-1.7 prueba')]:
-                duplicate = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"reference": reference, "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", content, "application/pdf")}, headers=self.headers)
+                duplicate = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"bank":"BCP","account":"123456789","note":"Depósito de prueba", "reference": reference, "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", content, "application/pdf")}, headers=self.headers)
                 self.assertEqual(duplicate.status_code, 409)
             self.post(f"/vouchers/{voucher_id}/void", {"reason": "Corregir comprobante"})
-            replacement = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"reference": "TEST-001", "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", b"%PDF-1.7 prueba", "application/pdf")}, headers=self.headers)
+            replacement = self.client.post(API + f'/liquidations/{liq["id"]}/vouchers', data={"bank":"BCP","account":"123456789","note":"Depósito de prueba", "reference": "TEST-001", "amount": "55", "paid_on": emission["sale_date"]}, files={"file": ("deposito.pdf", b"%PDF-1.7 prueba", "application/pdf")}, headers=self.headers)
             self.assertEqual(replacement.status_code, 200, replacement.text)
+            self.post(f'/vouchers/{replacement.json()["id"]}/verify', {"reason":"Verificado contra banco"})
             for action, target in [("submit", "submitted"), ("approve", "approved"), ("pay", "paid")]:
                 result = self.post(f'/liquidations/{liq["id"]}/{action}', {"reason": "Conciliación de prueba"})
                 self.assertEqual(result["status"], target)
