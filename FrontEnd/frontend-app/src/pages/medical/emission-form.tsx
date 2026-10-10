@@ -35,7 +35,7 @@ export function EmissionForm({ plans, emitters, globalAccess, close, saved }: { 
       try {
         const {data} = await api.post<{business_name?:string;address?:string;ubigeo?:string}>('/smart-forms/documents/lookup', {option_slug:'medical-emissions',document_type:'ruc',document_number:billing.customer_document_number}, {signal:controller.signal});
         if(controller.signal.aborted || version!==billingRevision.current)return;
-        setBilling(current=>({...current,customer_name:data.business_name || current.customer_name,customer_address:data.address || current.customer_address,customer_ubigeo:data.ubigeo || current.customer_ubigeo}));
+        setBilling(current=>({...current,customer_name:(data.business_name || current.customer_name).toUpperCase(),customer_address:(data.address || current.customer_address).toUpperCase(),customer_ubigeo:/^\d{6}$/.test(data.ubigeo || '') ? data.ubigeo! : ''}));
         setRucStatus('RUC consultado. Revisa los datos del adquirente.');
       } catch {if(!controller.signal.aborted)setRucStatus('No se pudo consultar el RUC. Completa los datos manualmente.');}
     },350);
@@ -69,7 +69,7 @@ export function EmissionForm({ plans, emitters, globalAccess, close, saved }: { 
         }
         if (controller.signal.aborted || generation !== revision.current) return;
         if (manualName === nameRevision.current) {
-          const names = { first_names: identity.first_names || identity.full_name || '', paternal_surname: identity.paternal_surname || '', maternal_surname: identity.maternal_surname || '' };
+          const names = { first_names: (identity.first_names || identity.full_name || '').toUpperCase(), paternal_surname: (identity.paternal_surname || '').toUpperCase(), maternal_surname: (identity.maternal_surname || '').toUpperCase() };
           setForm(current => ({ ...current, ...names, customer: Object.values(names).filter(Boolean).join(' ') }));
         }
         setLookup({ state: 'success', message: manualName === nameRevision.current ? 'DNI encontrado. Nombres y apellidos completados.' : 'DNI encontrado. Se conserva el nombre que editaste.' });
@@ -92,7 +92,7 @@ export function EmissionForm({ plans, emitters, globalAccess, close, saved }: { 
     if (form.starts_on < tomorrowInLima()) { setError('La vigencia debe comenzar mañana o después, según la hora de Lima.'); return; }
     setBusy(true); setError('');
     try {
-      await api.post('/medical/emissions', { ...form, customer: form.customer.trim(), plan_id: Number(form.plan_id), emitter_id: Number(form.emitter_id), billing: billing.invoice_type_code === '01' ? { ...billing, due_date: form.payment_status === 'pending' ? billing.due_date || null : null } : { invoice_type_code: '03' } });
+      await api.post('/medical/emissions', { ...form, customer: form.customer.trim(), plan_id: Number(form.plan_id), emitter_id: Number(form.emitter_id), billing: billing.invoice_type_code === '01' ? { ...billing, due_date: null } : { invoice_type_code: '03' } });
       await saved();
     } catch (e) {
       const detail = axios.isAxiosError(e) ? e.response?.data?.detail : null;
@@ -100,9 +100,9 @@ export function EmissionForm({ plans, emitters, globalAccess, close, saved }: { 
     } finally { setBusy(false); }
   }
   return <Dialog open onOpenChange={open => { if (!open && !busy) close(); }}><DialogContent className="max-h-[94dvh] overflow-y-auto p-0 sm:max-w-4xl">
-    <DialogHeader className="border-b bg-emerald-500/5 px-6 py-5 text-left"><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-400"><HeartPulse className="size-4" /> Programas de asistencia</div><DialogTitle className="text-2xl">Nueva emisión</DialogTitle><DialogDescription>Completa los datos del titular y elige cuándo empieza su protección.</DialogDescription></DialogHeader>
+    <DialogHeader className="border-b bg-emerald-500/5 px-6 py-5 pr-16 text-left sm:px-8 sm:py-6 sm:pr-16"><div className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-400"><HeartPulse className="size-4" /> Programas de asistencia</div><DialogTitle className="text-2xl">Nueva emisión</DialogTitle><DialogDescription>Completa los datos del titular y elige cuándo empieza su protección.</DialogDescription></DialogHeader>
     <form onSubmit={submit} className="min-w-0"><fieldset disabled={busy} className="grid min-w-0 md:grid-cols-[1fr_250px]">
-      <div className="min-w-0 space-y-6 p-6">
+      <div className="min-w-0 space-y-6 p-6 sm:p-8">
         {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-700">{error}</p>}
         <section className="space-y-3"><h3 className="flex items-center gap-2 font-semibold"><ShieldCheck className="size-4 text-emerald-600" /> Programa y emisor</h3><div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm">Plan de asistencia<SearchableSelect aria-label="Plan de asistencia" className={selectClass} disabled={busy} value={form.plan_id} onValueChange={value => setForm({ ...form, plan_id: value })} options={plans.map(p => ({ value: String(p.id), label: `${String(p.name)} · ${money(p.price)}` }))} placeholder="Seleccionar plan" /></label>
@@ -116,7 +116,7 @@ export function EmissionForm({ plans, emitters, globalAccess, close, saved }: { 
             ['first_names', 'Nombres', 100], ['paternal_surname', 'Apellido paterno', 80], ['maternal_surname', 'Apellido materno', 80],
           ] as const).map(([field, label, max]) => <label key={field} className="space-y-1.5 text-sm">{label}<Input className="h-11" aria-label={label} maxLength={max} value={form[field]} required={field === 'first_names'} onChange={e => {
             nameRevision.current += 1;
-            const next = { ...form, [field]: e.target.value };
+            const next = { ...form, [field]: e.target.value.toUpperCase() };
             next.customer = [next.first_names, next.paternal_surname, next.maternal_surname].map(v => v.trim()).filter(Boolean).join(' ');
             setForm(next);
           }} /></label>)}</div>
@@ -125,7 +125,7 @@ export function EmissionForm({ plans, emitters, globalAccess, close, saved }: { 
         </section>
         <section className="space-y-3 border-t pt-5"><h3 className="font-semibold">Comprobante del programa</h3>
           <label className="block space-y-1.5 text-sm">Tipo de comprobante<SearchableSelect aria-label="Tipo de comprobante" disabled={busy} value={billing.invoice_type_code} options={[{value:'03',label:'Boleta · titular del programa'},{value:'01',label:'Factura · adquirente con RUC'}]} onValueChange={value=>setBilling({...billing,invoice_type_code:value})}/></label>
-          {billing.invoice_type_code==='01'&&<><div className="grid gap-4 sm:grid-cols-2">{([['customer_document_number','RUC del adquirente',11],['customer_name','Razón social del adquirente',180],['customer_address','Dirección fiscal del adquirente',250],['customer_ubigeo','Ubigeo del adquirente',6]] as const).map(([key,label,max])=><label key={key} className="space-y-1.5 text-sm">{label}<Input aria-label={label} required value={billing[key]} maxLength={max} pattern={key==='customer_document_number'?'[0-9]{11}':key==='customer_ubigeo'?'[0-9]{6}':undefined} onChange={e=>{billingRevision.current+=1;setBilling({...billing,[key]:e.target.value,...(key==='customer_document_number'?{customer_name:'',customer_address:'',customer_ubigeo:''}:{})});}}/></label>)}</div><p role="status" className="text-xs text-muted-foreground">{rucStatus}</p>{form.payment_status==='pending'&&<label className="block space-y-1.5 text-sm">Vencimiento del pago a crédito<Input aria-label="Vencimiento del pago a crédito" type="date" required min={minimum} value={billing.due_date} onChange={e=>setBilling({...billing,due_date:e.target.value})}/></label>}<p className="text-xs text-muted-foreground">El titular conserva su cobertura personal; la factura identifica al adquirente con RUC. El tipo no se cambia después de numerar.</p></>}
+          {billing.invoice_type_code==='01'&&<><div className="grid gap-4 sm:grid-cols-2">{([['customer_document_number','RUC del adquirente',11],['customer_name','Razón social del adquirente',180],['customer_address','Dirección fiscal del adquirente',250]] as const).map(([key,label,max])=><label key={key} className="space-y-1.5 text-sm">{label}<Input aria-label={label} required value={billing[key]} maxLength={max} pattern={key==='customer_document_number'?'[0-9]{11}':undefined} onChange={e=>{billingRevision.current+=1;setBilling({...billing,[key]:e.target.value.toUpperCase(),...(key==='customer_document_number'?{customer_name:'',customer_address:'',customer_ubigeo:''}:{})});}}/></label>)}</div><p role="status" className="text-xs text-muted-foreground">{rucStatus}</p><p className="text-xs text-muted-foreground">El titular conserva su cobertura personal; la factura identifica al adquirente con RUC. El tipo no se cambia después de numerar.</p></>}
         </section>
         <section className="space-y-3 border-t pt-5"><h3 className="flex items-center gap-2 font-semibold"><CalendarDays className="size-4 text-emerald-600" /> Vigencia y pago</h3><label className="block space-y-1.5 text-sm">Inicio de vigencia<Input className="h-11" aria-label="Inicio de vigencia" type="date" min={minimum} value={form.starts_on} onChange={e => setForm({ ...form, starts_on: e.target.value })} required /></label><p className="text-xs text-muted-foreground">Desde mañana o una fecha posterior. No se permite iniciar hoy ni en fechas anteriores. Hora de Lima.</p><div className="grid gap-4 sm:grid-cols-2">
           <label className="space-y-1.5 text-sm">Medio de pago<SearchableSelect aria-label="Medio de pago" className={selectClass} disabled={busy} value={form.payment_method} onValueChange={value => setForm({ ...form, payment_method: value, ...(value === 'online' && form.payment_status === 'collected_by_seller' ? { payment_status: 'pending' } : {}) })} options={[['cash','Efectivo'],['transfer','Transferencia'],['card','Tarjeta'],['online','En línea']].map(([value,label]) => ({value,label}))} placeholder="Seleccionar medio" /></label>

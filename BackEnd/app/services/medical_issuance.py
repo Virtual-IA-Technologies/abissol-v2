@@ -55,8 +55,8 @@ def create_sale(db, payload, emitter, actor_id):
     values = payload.model_dump()
     values.pop('billing',None)
     billing_preference=payload.billing.model_dump(mode='json') if payload.billing else None
-    if payload.billing and payload.billing.invoice_type_code=='01' and payload.payment_status=='pending':
-        if not payload.billing.due_date or payload.billing.due_date<=today:
+    if payload.billing and payload.billing.invoice_type_code=='01' and payload.billing.due_date:
+        if payload.billing.due_date<=today:
             raise HTTPException(422,'La factura a crédito requiere una fecha de vencimiento posterior a hoy')
     values['billing_preference']=billing_preference
     values.update(code='PRUEBA-'+secrets.token_hex(10) if test_batch else f"{plan.prefix}-{plan.counter:06d}",token=secrets.token_urlsafe(32),test_batch=test_batch,

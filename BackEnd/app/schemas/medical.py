@@ -1,7 +1,7 @@
 from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
-from pydantic import BaseModel, ConfigDict, Field, EmailStr, model_validator
+from pydantic import BaseModel, ConfigDict, Field, EmailStr, model_validator, field_validator
 
 Money = Annotated[Decimal, Field(ge=0, le=99999999, max_digits=12, decimal_places=2)]
 Name = Annotated[str, Field(min_length=2, max_length=180)]
@@ -53,10 +53,15 @@ class BillingPreference(Payload):
     customer_ubigeo: str = Field(default="",pattern=r"^(\d{6})?$")
     due_date: date | None = None
 
+    @field_validator('customer_name', 'customer_address', mode='before')
+    @classmethod
+    def uppercase(cls, value):
+        return value.upper() if isinstance(value,str) else value
+
     @model_validator(mode="after")
     def receiver(self):
-        if self.invoice_type_code=="01" and (self.customer_document_type!='RUC' or len(self.customer_document_number)!=11 or not self.customer_document_number.isdigit() or len(self.customer_name)<2 or not self.customer_address or not self.customer_ubigeo):
-            raise ValueError("La factura requiere RUC, razón social, dirección y ubigeo del adquirente")
+        if self.invoice_type_code=="01" and (self.customer_document_type!='RUC' or len(self.customer_document_number)!=11 or not self.customer_document_number.isdigit() or len(self.customer_name)<2 or not self.customer_address):
+            raise ValueError("La factura requiere RUC, razón social y dirección del adquirente")
         if self.invoice_type_code=='03' and (self.customer_document_number or self.customer_name or self.customer_document_type):
             if not self.customer_document_type or not self.customer_name or not self.customer_document_number:
                 raise ValueError("Completa los datos del adquirente de la boleta")
@@ -83,6 +88,12 @@ class IssuanceInput(Payload):
     external_source: str | None = Field(default=None, min_length=1, max_length=80)
     external_reference: str | None = Field(default=None, min_length=1, max_length=100)
     billing: BillingPreference | None = None
+
+    @field_validator('customer', 'first_names', 'paternal_surname', 'maternal_surname', mode='before')
+    @classmethod
+    def uppercase(cls, value):
+        return value.upper() if isinstance(value,str) else value
+
     @model_validator(mode="after")
     def valid_document(self):
         parts = [self.first_names, self.paternal_surname, self.maternal_surname]

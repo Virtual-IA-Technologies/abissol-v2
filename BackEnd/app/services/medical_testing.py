@@ -42,7 +42,7 @@ def preview(db,emission):
         'customer_document_type':preference.get('customer_document_type') or emission.document_type,
         'customer_address':preference.get('customer_address',''),'customer_ubigeo':preference.get('customer_ubigeo',''),
         'customer_email':emission.email,'due_date':preference.get('due_date'),'invoice_type_code':invoice_type,
-        'payment_terms':'Credito' if is_invoice and emission.payment_status=='pending' else 'Contado',
+        'payment_terms':'Credito' if is_invoice and preference.get('due_date') else 'Contado',
         'issuer':{k:raw.get(k) for k in fiscal.PUBLIC_FIELDS},'issue_time':datetime.now(ZoneInfo('America/Lima')).strftime('%H:%M:%S'),
         'tax_amount':'0.00','unaffected_amount':str(emission.price),'files':{},'sunat_logs':[],'unsigned_preview':True}
     row=MedicalInvoice(issuance_id=emission.id,draft_key=emission.id,document_type='factura' if is_invoice else 'boleta',

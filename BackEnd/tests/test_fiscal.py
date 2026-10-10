@@ -183,13 +183,27 @@ class FiscalFlowTests(unittest.TestCase):
                 billing.process_job(db,job.id)
                 self.assertEqual(send.call_count,1)
 
-    def test_factura_requires_due_date_before_reserving_number(self):
+    def test_factura_pending_collection_is_contado_without_manual_ubigeo(self):
         self.enable()
-        payload=dict(plan_id=self.plan_id,emitter_id=self.profile_id,document_type='DNI',document_number='12345678',customer='PRUEBA',starts_on=(utc_now().date()+timedelta(days=2)).isoformat(),payment_status='pending',payment_method='cash',billing=dict(invoice_type_code='01',customer_document_type='RUC',customer_document_number='20100066603',customer_name='EMPRESA',customer_address='CALLE 123',customer_ubigeo='150101'))
-        self.post('/emissions',payload,422)
         with self.sessions() as db:
-            self.assertEqual(db.query(MedicalIssuance).count(),0)
-            self.assertEqual(db.query(FiscalJob).count(),0)
+            cfg,raw=billing.configuration(db)
+            raw.update(v2_invoice_series='FV02',v2_invoice_counter=0)
+            billing.persist_config(cfg,raw);db.commit()
+        self.issuance(customer='Ana perez',first_names='Ana',paternal_surname='perez',payment_status='pending',billing=dict(invoice_type_code='01',customer_document_type='RUC',customer_document_number='20100066603',customer_name='Empresa ejemplo',customer_address='calle 123'))
+        with self.sessions() as db:
+            emission=db.query(MedicalIssuance).one()
+            invoice=db.query(MedicalInvoice).one()
+            self.assertEqual(emission.customer,'ANA PEREZ')
+            self.assertEqual(emission.first_names,'ANA')
+            self.assertEqual(emission.payment_status,'pending')
+            self.assertEqual(invoice.customer,'EMPRESA EJEMPLO')
+            self.assertEqual(invoice.details['customer_address'],'CALLE 123')
+            self.assertEqual(invoice.details['customer_ubigeo'],'')
+            self.assertEqual(invoice.details['payment_terms'],'Contado')
+            xml=sunat.build_invoice(config(),invoice,invoice.details['items'])
+            terms=xml.findall('cac:PaymentTerms',sunat.NS)
+            self.assertEqual([p.findtext('cbc:PaymentMeansID',namespaces=sunat.NS) for p in terms],['Contado'])
+            self.assertIsNone(xml.find('.//cbc:PaymentDueDate',sunat.NS))
 
     def test_timeout_recovers_cdr_without_resending_or_renumbering(self):
         self.enable()

@@ -125,7 +125,7 @@ def enqueue_boleta(db, emission):
         details={'items':items,'customer_document_type':preference.get('customer_document_type') or emission.document_type,'environment':raw['environment'],
                  'invoice_type_code':'01' if is_invoice else '03','customer_address':preference.get('customer_address',''),
                  'customer_ubigeo':preference.get('customer_ubigeo',''),'due_date':preference.get('due_date'),
-                 'payment_terms':'Credito' if is_invoice and emission.payment_status=='pending' else 'Contado',
+                 'payment_terms':'Credito' if is_invoice and preference.get('due_date') else 'Contado',
                  'issue_time':datetime.now(ZoneInfo('America/Lima')).strftime('%H:%M:%S'),
                  'issuer':{k:raw.get(k) for k in PUBLIC_FIELDS},'tax_amount':'0.00','unaffected_amount':str(emission.price),'files':{},'sunat_logs':[]})
     db.add(invoice)

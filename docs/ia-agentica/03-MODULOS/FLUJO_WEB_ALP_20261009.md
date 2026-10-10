@@ -125,3 +125,21 @@ Se retiró la etiqueta PRUEBA añadida a asunto/cuerpo de confirmación; los có
 y documentos de prueba mantienen su identificación y el bloqueo SUNAT continúa.
 Pruebas focalizadas: cortes, exclusión de pruebas, deduplicación, adjuntos diario y
 mensual, resultado SMTP incierto y entrega permitida: 4 pruebas correctas.
+
+## Registro de emisión: espacio y datos del adquirente
+
+Encabezado lateral con margen horizontal explícito en escritorio y móvil;
+cuerpo con 32 px en escritorio. Nombres, apellidos, razón social y dirección
+se convierten a mayúsculas tanto al escribir/consultar como en el backend.
+Ubigeo del adquirente se conserva si la consulta RUC devuelve seis dígitos;
+ya no se pide el código manualmente ni bloquea el registro si está ausente.
+No se inventa un ubigeo ni se sustituye por el del emisor. El XML ya omite
+el elemento del adquirente cuando no está disponible; el del emisor conserva
+su validación. Referencia: guía oficial SUNAT Factura UBL 2.1, adquirente (18–19).
+
+El formulario no solicita vencimiento ni genera crédito por estar pendiente
+de cobro interno. Sin vencimiento explícito, la factura se genera al contado;
+se conserva el estado de cobranza y la compatibilidad de integraciones que
+envían expresamente un vencimiento válido. Aplica también a documentos de
+prueba. Dos pruebas fiscales verifican XML, normalización y contrato externo
+con proveedores simulados; sin envíos a SUNAT ni emisiones reales.
