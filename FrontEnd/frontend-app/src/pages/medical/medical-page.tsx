@@ -1,24 +1,26 @@
 import { RecordContextMenu } from "@/components/record-context-menu";
 import { RowActionsMenu, type RowAction } from "@/components/row-actions-menu";
-import { EmissionDelivery } from './emission-delivery';
 import { SearchableSelect } from '@/components/searchable-select';
-import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined, Settings2, Ban, Eye, Pencil, ExternalLink, BookOpen } from "lucide-react";
 import axios from "axios";
 import api from "@/lib/api";
-import { BillingHistory } from "./billing-history";
 import { UnderlineTabs } from "@/components/underline-tabs";
 import { BillingConfiguration } from "./billing-configuration";
 import { BusinessWorkspace, type SectionProps } from "./business-workspace";
-import { LiquidationDetail, type SettlementDetail } from "./liquidation-detail";
-import { SellerSettlementForm } from "./seller-settlement-form";
-import { SellerSettlementDetail } from "./seller-settlement-detail";
 import { LiquidationBuilder } from "./business-workspace-panels";
-import { EmissionForm } from "./emission-form";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/side-dialog";
+
+import type { SettlementDetail } from "./liquidation-detail";
+const EmissionForm=lazy(()=>import('./emission-form').then(m=>({default:m.EmissionForm})));
+const EmissionDelivery=lazy(()=>import('./emission-delivery').then(m=>({default:m.EmissionDelivery})));
+const BillingHistory=lazy(()=>import('./billing-history').then(m=>({default:m.BillingHistory})));
+const SellerSettlementForm=lazy(()=>import('./seller-settlement-form').then(m=>({default:m.SellerSettlementForm})));
+const SellerSettlementDetail=lazy(()=>import('./seller-settlement-detail').then(m=>({default:m.SellerSettlementDetail})));
+const LiquidationDetail=lazy(()=>import('./liquidation-detail').then(m=>({default:m.LiquidationDetail})));
 
 type Value = string | number | boolean | null;
 type Row = Record<string, Value>;
@@ -236,6 +238,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     </section>
     {recordPreview && <Dialog open onOpenChange={open=>{if(!open)setRecordPreview(null);}}><DialogContent><DialogHeader><DialogTitle>{titles[section]} · Detalle</DialogTitle><DialogDescription>Consulta del registro seleccionado.</DialogDescription></DialogHeader><dl className="space-y-4">{columns[section].map(([label,render])=><div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="break-words font-medium">{render(recordPreview)}</dd></div>)}</dl></DialogContent></Dialog>}
     {letterPreview && <Dialog open onOpenChange={open=>{if(!open)setLetterPreview(null);}}><DialogContent className="sm:max-w-5xl"><DialogHeader><DialogTitle>{letterPreview.code}</DialogTitle><DialogDescription>Documento del programa de asistencia.</DialogDescription></DialogHeader><iframe title="Documento del programa" src={letterPreview.url} className="h-[75vh] w-full rounded-lg border" /></DialogContent></Dialog>}
+    <Suspense fallback={<div role="status" className="fixed bottom-5 right-5 z-50 rounded-xl border bg-background p-4 text-sm shadow-lg">Cargando formulario…</div>}>
     {delivery && <EmissionDelivery row={{id:Number(delivery.id),code:String(delivery.code),token:String(delivery.token),email:String(delivery.email||""),phone:String(delivery.phone||""),test_batch:delivery.test_batch?String(delivery.test_batch):null}} close={()=>setDelivery(null)}/>}
     {invoiceId !== null && <BillingHistory key={invoiceId} id={invoiceId} close={() => setInvoiceId(null)} download={download} />}
     {modal?.path === "/liquidations" && (liquidationKind||"seller")!=="seller" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(section!=="liquidations"); }} />}
@@ -243,6 +246,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     {modal && modal.path !== "/emissions" && modal.path !== "/liquidations" && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(["failed", "uncertain"].includes(String(result.status)) ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(section!=="liquidations"); }} />}
     {modal?.path === "/liquidations" && (liquidationKind||"seller")==="seller" && <SellerSettlementForm profiles={profileOptions("responsible")} close={()=>setModal(null)} saved={async()=>{setModal(null);await load(false);}}/>}
     {detail&&detail.kind==="seller"&&!detail.legacy_id&&["submitted","approved","paid"].includes(detail.status)?<SellerSettlementDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} manager={manager&&lookup.global_access}/>:detail&&<LiquidationDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} editor={editor} manager={manager&&lookup.global_access}/>}
+    </Suspense>
     </>}
     </UnderlineTabs>
   </section>;

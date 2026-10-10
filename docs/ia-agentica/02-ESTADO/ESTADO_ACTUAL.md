@@ -1,5 +1,12 @@
 # Estado actual
 
+## Dashboard comercial — 10/10/2026
+
+Inicio incorpora emisiones, ventas, vigencias y liquidaciones según permisos, gráficos
+ligeros con movimiento reducido y períodos de 7/30/90 días. Una petición y agregaciones
+SQL; seis formularios comerciales pasan a carga diferida. Sin cambios de datos.
+Detalle: [dashboard](../03-MODULOS/DASHBOARD.md).
+
 ## Liquidaciones y vouchers históricos — 10/10/2026
 
 Nueva liquidación vuelve a abrir los pendientes en panel lateral. Vouchers históricos
