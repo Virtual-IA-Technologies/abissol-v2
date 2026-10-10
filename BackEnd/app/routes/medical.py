@@ -4,7 +4,7 @@ import html
 import json
 import re
 import secrets
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -68,7 +68,9 @@ def profiles_scope(db, user):
         return query.filter(false())
     if own.kind == "source_admin":
         return query.filter(Profile.source_id == own.source_id)
-    return query.filter(or_(Profile.id == own.id, Profile.manager_id == own.id))
+    if own.kind == "emitter":
+        return query.filter(Profile.id == own.id)
+    return query.filter(Profile.source_id == own.source_id, or_(Profile.id == own.id, Profile.manager_id == own.id))
 
 
 def scope(db, user):
@@ -81,8 +83,15 @@ def scope(db, user):
     if own.kind == "source_admin":
         return query.filter(Issuance.source_id == own.source_id)
     if own.kind == "responsible":
-        return query.filter(Issuance.responsible_id == own.id)
-    return query.filter(Issuance.emitter_id == own.id)
+        return query.filter(Issuance.source_id == own.source_id, or_(Issuance.responsible_id == own.id, Issuance.emitter_id == own.id))
+    return query.filter(Issuance.source_id == own.source_id, Issuance.emitter_id == own.id)
+
+
+def settlement_profiles(db, user):
+    own = profile(db, user) if not admin(user) else None
+    if own and own.kind == "emitter":
+        return db.query(Profile).filter(Profile.id == own.manager_id, Profile.source_id == own.source_id, Profile.kind == "responsible")
+    return profiles_scope(db, user).filter(Profile.kind == "responsible")
 
 
 def find(query, ident, lock=False):
@@ -130,7 +139,7 @@ def lookups(section: str, db: Session = Depends(get_db), identity=Depends(get_cu
     user = identity.effective_user
     ensure_option_access(db, user, "medical-" + section)
     needs_people = section in {"network", "emissions", "liquidations"}
-    people = profiles_scope(db, user).all() if needs_people else []
+    people = (settlement_profiles(db, user) if section == "liquidations" else profiles_scope(db, user)).all() if needs_people else []
     sources = []
     if section == "network":
         query = db.query(Source)
@@ -407,17 +416,22 @@ def liquidation_scope(db, user):
     if admin(user):
         return query
     own = profile(db, user)
-    if not own or own.kind == "emitter":
+    if not own:
         return query.filter(false())
+    if own.kind == "emitter":
+        visible = scope(db, user).with_entities(Issuance.id).scalar_subquery()
+        has_items = db.query(Item.id).filter(Item.liquidation_id == Liquidation.id).exists()
+        outside = db.query(Item.id).filter(Item.liquidation_id == Liquidation.id, ~Item.issuance_id.in_(visible)).exists()
+        return query.filter(Liquidation.kind == "seller", has_items, ~outside)
     return query.filter(Liquidation.kind == "seller", Liquidation.responsible_id.in_(profiles_scope(db, user).with_entities(Profile.id).scalar_subquery()))
 
 
 def liquidation_candidates(db, user, payload, lock=False):
     own = profile(db, user)
-    if not admin(user) and (not own or own.kind == "emitter" or payload.kind != "seller"):
+    if not admin(user) and (not own or payload.kind != "seller"):
         raise HTTPException(403, "Tu perfil no puede preparar esta liquidación")
     if payload.kind == "seller":
-        find(profiles_scope(db, user).filter(Profile.kind == "responsible"), payload.responsible_id)
+        find(settlement_profiles(db, user), payload.responsible_id)
     eligible = scope(db, user).filter(Issuance.test_batch==getattr(payload,'test_batch',None), Issuance.status == "issued", Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
     if payload.kind == "seller":
         states=['pending','collected_by_seller'] if getattr(payload,'deposit_submission',False) else ['collected_by_seller','paid_to_abissol','settled']
@@ -582,8 +596,13 @@ def liquidation_action(ident: int, action: str, payload: ReasonInput, request: R
 
 
 @router.get("/billing")
-def billing(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), db: Session = Depends(get_db), user=Depends(require_access("medical-billing"))):
-    return page(invoice_scope(db, user), offset, limit)
+def billing(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), search: str = Query('', max_length=180), starts_on: date | None = None, ends_on: date | None = None, db: Session = Depends(get_db), user=Depends(require_access("medical-billing"))):
+    query = invoice_scope(db, user)
+    if search:
+        query = query.filter(or_(Invoice.full_number.contains(search), Invoice.customer.contains(search), Invoice.document_number.contains(search)))
+    if starts_on: query = query.filter(Invoice.issue_date >= starts_on)
+    if ends_on: query = query.filter(Invoice.issue_date <= ends_on)
+    return page(query, offset, limit)
 
 
 def invoice_scope(db, user):
@@ -787,11 +806,15 @@ def retry_dispatch(ident: int, request: Request, db: Session = Depends(get_db), 
 
 
 @router.get("/reports")
-def reports(starts_on: date | None = None, ends_on: date | None = None, db: Session = Depends(get_db), user=Depends(require_access("medical-reports"))):
-    query = filtered(scope(db, user), "", starts_on, ends_on).filter(Issuance.test_batch.is_(None), Issuance.status == "issued")
+def reports(starts_on: date | None = None, ends_on: date | None = None, search: str = Query('', max_length=180), db: Session = Depends(get_db), user=Depends(require_access("medical-reports"))):
+    query = filtered(scope(db, user), search, starts_on, ends_on).filter(Issuance.test_batch.is_(None), Issuance.status == "issued")
+    used = db.query(Item.issuance_id).filter(Item.active_key.like('seller:%')).scalar_subquery()
+    unliquidated = case((~Issuance.id.in_(used) & Issuance.payment_status.in_(['pending', 'collected_by_seller']), Issuance.price), else_=0)
+    today = datetime.now(ZoneInfo('America/Lima')).date()
+    expiring = case((Issuance.ends_on.between(today, today + timedelta(days=30)), 1), else_=0)
     totals = query.with_entities(func.count(Issuance.id), func.coalesce(func.sum(Issuance.price), 0),
-        func.coalesce(func.sum(Issuance.paid_amount), 0), func.coalesce(func.sum(Issuance.seller_commission), 0), func.coalesce(func.sum(Issuance.provider_cost), 0)).one()
-    groups = query.with_entities(Issuance.plan_name, func.count(Issuance.id), func.sum(Issuance.price)).group_by(Issuance.plan_name).all()
+        func.coalesce(func.sum(Issuance.paid_amount), 0), func.coalesce(func.sum(Issuance.seller_commission), 0), func.coalesce(func.sum(Issuance.provider_cost), 0), func.coalesce(func.sum(unliquidated), 0), func.coalesce(func.sum(expiring), 0)).one()
+    groups = query.with_entities(Issuance.plan_name, func.count(Issuance.id), func.sum(Issuance.price), func.sum(Issuance.paid_amount), func.sum(Issuance.seller_commission), func.sum(unliquidated), func.sum(expiring)).group_by(Issuance.plan_name).all()
     return {"count": totals[0], "sales": str(totals[1]), "collected": str(totals[2]), "pending": str(totals[1] - totals[2]),
-            "commissions": str(totals[3]), "provider_cost": str(totals[4]),
-            "items": [{"plan": name, "count": count, "sales": str(sales)} for name, count, sales in groups], "total": len(groups)}
+            "commissions": str(totals[3]), "provider_cost": str(totals[4]), "unliquidated": str(totals[5]), "expiring": totals[6],
+            "items": [{"plan": name, "count": count, "sales": str(sales), "pending": str(sales-collected), "commissions": str(commission), "unliquidated": str(deposit), "expiring": expires} for name, count, sales, collected, commission, deposit, expires in groups], "total": len(groups)}

@@ -16,10 +16,10 @@ router=APIRouter(prefix='/medical')
 @router.get('/seller-pending')
 def pending(responsible_id:int|None=None,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','editor'))):
     own=m.profile(db,user)
-    if not m.admin(user) and (not own or own.kind=='emitter'):raise HTTPException(403,'Tu perfil no prepara liquidaciones')
+    if not m.admin(user) and not own:raise HTTPException(403,'Tu perfil no prepara liquidaciones')
     query=m.scope(db,user).filter(m.Issuance.status=='issued',m.Issuance.payment_status.in_(['pending','collected_by_seller']))
     if responsible_id:
-        m.find(m.profiles_scope(db,user).filter(m.Profile.kind=='responsible'),responsible_id)
+        m.find(m.settlement_profiles(db,user),responsible_id)
         query=query.filter(m.Issuance.responsible_id==responsible_id)
     used=db.query(m.Item.issuance_id).filter(m.Item.active_key.like('seller:%'))
     rows=query.filter(~m.Issuance.id.in_(used.scalar_subquery())).order_by(m.Issuance.id.desc()).limit(1000).all()
@@ -116,12 +116,14 @@ def verify(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_
 @router.get('/seller-statements')
 def statements(search:str=Query('',max_length=180),offset:int=Query(0,ge=0),limit:int=Query(25,ge=1,le=100),db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations'))):
     own=m.profile(db,user) if not m.admin(user) else None
-    if not m.admin(user) and (not own or own.kind=='emitter'):raise HTTPException(403,'Tu perfil no tiene estado de cuenta de vendedor')
-    query=m.profiles_scope(db,user).filter(m.Profile.kind=='responsible')
+    if not m.admin(user) and not own:raise HTTPException(403,'Tu perfil no tiene estado de cuenta de vendedor')
+    query=m.settlement_profiles(db,user)
     if search:query=query.filter(m.Profile.display_name.contains(search))
     count=query.count();profiles=query.order_by(m.Profile.id).offset(offset).limit(limit).all();ids=[p.id for p in profiles]
     if not ids:return {'items':[],'total':count}
     E,L,V=m.Issuance,m.Liquidation,m.Voucher
+    visible_emissions=m.scope(db,user).with_entities(E.id).scalar_subquery()
+    visible_liquidations=m.liquidation_scope(db,user).with_entities(L.id).scalar_subquery()
     used=exists().where(m.Item.issuance_id==E.id,m.Item.active_key.like('seller:%'))
     available=(~used)&E.payment_status.in_(['collected_by_seller','paid_to_abissol','settled'])
     deposit=case((E.payment_status!='collected_by_seller',0),else_=E.price)
@@ -129,8 +131,8 @@ def statements(search:str=Query('',max_length=180),offset:int=Query(0,ge=0),limi
         func.sum(E.price).label('sales'),func.sum(case((E.payment_status=='pending',E.price),else_=0)).label('uncollected'),
         func.sum(case((available,deposit),else_=0)).label('unliquidated_deposit'),
         func.sum(case((available,E.seller_commission),else_=0)).label('unliquidated_commission'))
-        .join(m.Source,m.Source.id==E.source_id).filter(E.test_batch.is_(None),E.responsible_id.in_(ids),E.status=='issued').group_by(E.responsible_id)}
-    grouped=db.query(V.liquidation_id,*r.aggregate()).join(L,L.id==V.liquidation_id).filter(L.responsible_id.in_(ids),L.kind=='seller',L.legacy_id.is_(None),V.active.is_(True)).group_by(V.liquidation_id).subquery()
+        .join(m.Source,m.Source.id==E.source_id).filter(E.id.in_(visible_emissions),E.test_batch.is_(None),E.responsible_id.in_(ids),E.status=='issued').group_by(E.responsible_id)}
+    grouped=db.query(V.liquidation_id,*r.aggregate()).join(L,L.id==V.liquidation_id).filter(L.id.in_(visible_liquidations),L.responsible_id.in_(ids),L.kind=='seller',L.legacy_id.is_(None),V.active.is_(True)).group_by(V.liquidation_id).subquery()
     z=lambda name:func.coalesce(getattr(grouped.c,name),0)
     native=(L.legacy_id.is_(None))&(L.status!='cancelled')&(~L.code.like('PRUEBA-%'))
     due=L.deposit_required-z('deposit_verified')-z('commission_offset_verified')
@@ -141,7 +143,7 @@ def statements(search:str=Query('',max_length=180),offset:int=Query(0,ge=0),limi
         ('pending_verification',sum((z(k+'_pending') for k in r.PURPOSES)))]]
     liqs={row.responsible_id:dict(row._mapping) for row in db.query(L.responsible_id,*fields,
         func.sum(case((L.legacy_id.is_not(None),1),else_=0)).label('historical_count'))
-        .outerjoin(grouped,grouped.c.liquidation_id==L.id).filter(L.responsible_id.in_(ids),L.kind=='seller').group_by(L.responsible_id)}
+        .outerjoin(grouped,grouped.c.liquidation_id==L.id).filter(L.id.in_(visible_liquidations),L.responsible_id.in_(ids),L.kind=='seller').group_by(L.responsible_id)}
     items=[]
     for p in profiles:
         values={**sales.get(p.id,{}),**liqs.get(p.id,{})}

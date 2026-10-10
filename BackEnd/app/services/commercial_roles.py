@@ -13,8 +13,9 @@ def seed_commercial_roles(db):
             db.add(role)
             db.flush()
             permissions = {"inicio": "lector", "medical": "lector", "medical-emissions": "editor", "medical-dispatches": "editor", "medical-reports": "lector"}
-            if kind != "emitter":
-                permissions["medical-liquidations"] = "editor"
+            permissions["medical-liquidations"] = "editor"
+            permissions["medical-billing"] = "lector"
+            permissions["documentos"] = "editor"
             if kind == "source_admin":
                 permissions["medical-network"] = "lector"
             for slug, access in permissions.items():

@@ -1,5 +1,13 @@
 # Estado actual
 
+## Alcance comercial y vistas compactas — 10/10/2026
+
+Filtros agrupados y encabezados simplificados en Emisiones, Liquidaciones y Facturación.
+Reportes con cobros, depósito pendiente y vencimientos; dependientes pueden liquidar
+sus propias ventas sin acceder a partidas ajenas. Archivos y comprobantes conservan
+el alcance comercial de su origen. Migración 0016 y ajuste del portal ALP.
+Detalle: [alcance comercial y filtros](../03-MODULOS/ALCANCE_COMERCIAL_Y_FILTROS.md).
+
 ## Pruebas sin numeración real — 07/10/2026
 
 Modo temporal para emisiones nuevas internas/externas: lote identificable,

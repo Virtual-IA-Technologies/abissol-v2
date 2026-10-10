@@ -31,8 +31,8 @@ export function BusinessWorkspace({ section, renderSection }: { section: string;
   const requested = params.get("tab") || tabs[0].value;
   const tab = tabs.some(t => t.value === requested) ? requested : tabs[0].value;
   const change = (next: string) => { setParams({ tab: next }); };
-  return <main className="min-w-0 space-y-5 p-4 md:p-6">
-    <div><p className="text-xs font-medium uppercase tracking-widest text-emerald-600">Negocio ABISSOL</p><h1 className="mt-1 text-2xl font-semibold">{section === "emissions" ? "Emisiones" : "Liquidaciones"}</h1></div>
+  return <main className="min-w-0 space-y-3 p-4 md:p-6">
+    <div><h1 className="text-xl font-semibold">{section === "emissions" ? "Emisiones" : "Liquidaciones"}</h1></div>
     <UnderlineTabs label={section === "emissions" ? "Secciones de emisiones" : "Secciones de liquidaciones"} value={tab} onChange={change} tabs={tabs}>
       {section === "emissions" ? tab === "meta" ? <MetaDispatches /> : tab === "settings" ? <BusinessConfiguration /> : renderSection({ section: tab === "list" ? "emissions" : tab, embedded:true })
         : tab === 'accounts' ? <SellerStatements/> : renderSection({ section:"liquidations", embedded:true, liquidationKind: tab === "history" ? undefined : tab === "list" ? "seller" : tab, history:tab === "history" })}
