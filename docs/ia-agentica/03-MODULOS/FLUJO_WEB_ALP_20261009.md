@@ -59,3 +59,19 @@ por proveedores externos no se pueden retirar desde esta limpieza.
 
 Después de limpiar, el adaptador normal ALP consultó correctamente sus cuatro
 emisiones restantes y validó una emisión con rollback sin crear CAT ni venta.
+
+Plantilla WhatsApp actualizada en configuración productiva: saludo, bienvenida,
+programa/certificado, vigencia y enlaces separados por saltos de línea. Ajuste
+auditado y renderizado con datos ficticios; sin reenvíos ni cambios al correo.
+
+## Paneles laterales y documentos
+
+Formularios y detalles médicos usan el panel lateral derecho compartido (Sheet),
+incluidos envío, facturación y liquidaciones. Emisiones añade ver comprobante,
+condicionado y validar en la web oficial. El comprobante se obtiene bajo alcance
+de la emisión y sin generar documentos nuevos. Solo se consulta al abrir.
+Planes, red comercial, envíos, facturación, liquidaciones y reportes reutilizan
+acciones de fila para menú vertical, clic derecho y doble clic de consulta.
+Las operaciones de cobro, anulación y envío conservan permisos y confirmaciones.
+El detalle genérico de tablas de plataforma también abre lateralmente; los
+paneles existentes de usuarios, roles y auditoría conservan su comportamiento.

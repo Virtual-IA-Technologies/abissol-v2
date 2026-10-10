@@ -376,6 +376,15 @@ def letter(ident: int, request: Request, db: Session = Depends(get_db), user=Dep
     return Response(letter_pdf(row,public_url(request,row)),media_type='application/pdf',headers={'Cache-Control':'no-store'})
 
 
+@router.get('/emissions/{ident}/receipt')
+def emission_receipt(ident: int, db: Session = Depends(get_db), user=Depends(require_access('medical-emissions'))):
+    emission = find(scope(db, user), ident)
+    invoice = db.query(Invoice).filter(Invoice.issuance_id == emission.id, Invoice.deleted_at.is_(None), Invoice.document_type.in_(['boleta', 'factura'])).order_by(Invoice.id.desc()).first()
+    if not invoice:
+        raise HTTPException(404, 'Esta emisión no tiene un comprobante disponible')
+    return invoice_file(invoice.id, 'PDF', db, user)
+
+
 @router.get("/validate/{token}")
 def validate(token: str, request: Request, db: Session = Depends(get_db)):
     if not re.fullmatch(r'[A-Za-z0-9_-]{43,64}', token):

@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { SearchableSelect } from "@/components/searchable-select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/side-dialog";
 
 type Settings = { metafin_email: string; daily_dispatch_time: string; insured_email_template: string; insured_whatsapp_template: string; automatic_dispatch_active?: boolean };
 type Emission = { id:number; code:string; customer:string; document_number:string; plan_name:string; sale_date:string; price:string; commission:string; deposit:string; dispatch_status:string; last_dispatch_at?:string };

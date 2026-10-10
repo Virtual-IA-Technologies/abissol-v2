@@ -3,7 +3,7 @@ import {useAuth} from '@/context/AuthContext';
 import { useEffect, useState } from 'react';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/side-dialog';
 
 type Scalar = string | number | boolean | null;
 type Detail = {

@@ -1,6 +1,6 @@
 import { ChevronRight, Circle, MousePointer2, type LucideIcon } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
-import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription } from "@/components/ui/dialog";
+import { Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription } from "@/components/side-dialog";
 import { ContextMenu } from "radix-ui";
 
 import type { DoubleClickChoice } from "@/components/row-actions-menu";

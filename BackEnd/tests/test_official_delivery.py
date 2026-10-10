@@ -10,6 +10,21 @@ from app.services import medical_billing as fiscal
 
 
 class OfficialDeliveryTests(LocalTestModeTests):
+    def test_receipt_preview_respects_emission_scope(self):
+        from app.models import AccessGrant, Menu
+        self.prepare();self.enable()
+        with TemporaryDirectory() as tmp,patch.object(fiscal,'STORAGE',Path(tmp)):
+            sale=self.issuance()
+            path=API+f'/emissions/{sale["id"]}/receipt'
+            response=self.client.get(path,headers=self.headers)
+            self.assertEqual(response.status_code,200)
+            self.assertTrue(response.content.startswith(b'%PDF'))
+            _,headers=self.login('reader')
+            with self.sessions() as db:
+                menu=db.query(Menu).filter_by(slug='medical-emissions').one()
+                db.add(AccessGrant(usuario_id=self.reader_id,menu_id=menu.id,access_level='lector'));db.commit()
+            self.assertEqual(self.client.get(path,headers=headers).status_code,404)
+
     def test_official_search_and_allowed_test_delivery(self):
         self.prepare();self.enable()
         with TemporaryDirectory() as tmp,patch.object(fiscal,'STORAGE',Path(tmp)),patch('app.routes.medical.send_email') as mail,patch('app.routes.medical.send_whatsapp') as whatsapp:

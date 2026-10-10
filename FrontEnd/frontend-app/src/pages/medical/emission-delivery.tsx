@@ -3,7 +3,7 @@ import axios from 'axios';
 import api from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/side-dialog';
 
 type Emission = { id:number; code:string; email?:string; phone?:string; token:string; test_batch?:string|null };
 export function EmissionDelivery({row,close}:{row:Emission;close:()=>void}) {

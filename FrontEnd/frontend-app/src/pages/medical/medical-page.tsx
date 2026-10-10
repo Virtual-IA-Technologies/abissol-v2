@@ -3,7 +3,7 @@ import { RowActionsMenu, type RowAction } from "@/components/row-actions-menu";
 import { EmissionDelivery } from './emission-delivery';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined, Settings2, Ban } from "lucide-react";
+import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined, Settings2, Ban, Eye, Pencil, ExternalLink, BookOpen } from "lucide-react";
 import axios from "axios";
 import api from "@/lib/api";
 import { BillingHistory } from "./billing-history";
@@ -16,7 +16,7 @@ import { EmissionForm } from "./emission-form";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/side-dialog";
 
 type Value = string | number | boolean | null;
 type Row = Record<string, Value>;
@@ -60,6 +60,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [recordPreview,setRecordPreview]=useState<Row|null>(null);
   const [letterPreview,setLetterPreview]=useState<{url:string;code:string}|null>(null);
   useEffect(() => () => {if(letterPreview) URL.revokeObjectURL(letterPreview.url);}, [letterPreview]);
   const [delivery,setDelivery]=useState<Row|null>(null);
@@ -174,15 +175,38 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
       await downloadExcelXlsx(`abissol-${section}`, data.items, columns[section].map(([header, value]) => ({ header, value })), { organizationName: "ABISSOL", criteria: { Módulo: titles[section], Página: page + 1, Desde: start, Hasta: end } });
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
-  async function openLetter(r: Row) {
-    try {const result=await api.get(`/medical/emissions/${r.id}/letter`, {responseType:"blob"});setLetterPreview({url:URL.createObjectURL(result.data),code:String(r.code)});}
+  async function openLetter(r: Row, kind: "letter" | "receipt" | "conditions" = "letter") {
+    try {const result=await api.get(kind === "conditions" ? `/medical/validate/${r.token}/conditions` : `/medical/emissions/${r.id}/${kind}`, {responseType:"blob"});setLetterPreview({url:URL.createObjectURL(result.data),code:`${kind === "receipt" ? "Comprobante" : kind === "conditions" ? "Condicionado" : "Carta"} · ${r.code}`});}
     catch(e) {setError(errorText(e));}
   }
   function emissionActions(r: Row): RowAction[] {
     const actions: RowAction[] = [{ label: "Abrir carta PDF", icon: FileText, onSelect: () => void openLetter(r) }];
+    actions.push({label: "Ver comprobante", icon: Receipt, onSelect: () => void openLetter(r,"receipt")});
+    actions.push({label: "Ver condicionado", icon: BookOpen, onSelect: () => void openLetter(r,"conditions")});
+    actions.push({label: "Validar en la web oficial", icon: ExternalLink, onSelect: () => {const token=btoa(JSON.stringify({code:r.token})).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");window.open("https://abissol.org/?consulta="+token,"_blank","noopener,noreferrer");}});
     if (r.status === "issued" && can("medical-dispatches", "editor")) actions.push({label: "Enviar al cliente", icon: Send, onSelect: () => setDelivery(r)});
     if (editor && r.status === "issued" && r.payment_status === "pending") actions.push({label: "Registrar cobro", icon: Wallet, onSelect: () => setModal({title: "Confirmar cobro completo", path: `/emissions/${r.id}/payment`, fields: [{name: "payment_status", label: "Destino del dinero", options: opts("collected_by_seller", ...(lookup.global_access ? ["paid_to_abissol"] : []))}, {name: "reference", label: "Referencia del cobro"}], description: `Se registrará el cobro de ${money(r.price)}.`})});
     if (manager && r.status === "issued" && r.payment_status === "pending") actions.push({label: "Anular emisión", icon: Ban, destructive: true, onSelect: () => setModal({title: "Anular emisión", path: `/emissions/${r.id}/cancel`, fields: [reason]})});
+    return actions;
+  }
+  function rowActions(r:Row):RowAction[] {
+    if(section === "emissions") return emissionActions(r);
+    const actions:RowAction[]=[{label: "Ver detalle",icon:Eye,onSelect:()=>setRecordPreview(r)}];
+    if(section === "billing") {
+      actions[0]={label:"Historial y archivos",icon:Receipt,onSelect:()=>setInvoiceId(Number(r.id))};
+      if(lookup.can_configure_billing && !busy && ['blocked','uncertain'].includes(String(r.sunat_status))) actions.push({label:"Revisar SUNAT",icon:RefreshCw,onSelect:()=>{void (async()=>{setBusy(true);try{await api.post(`/medical/billing/${r.id}/retry`);await load();setNotice('Revisión programada. Si el envío fue incierto, solo se consultará el CDR.');}catch(e){setError(errorText(e));}finally{setBusy(false);}})();}});
+      if(editor&&!r.legacy_id&&r.status==="draft") actions.push({label:"Corregir",icon:Pencil,onSelect:()=>invoiceForm(r)});
+    }
+    if(section==="plans"&&manager)actions.push({label:"Editar",icon:Pencil,onSelect:()=>planForm(r)});
+    if(section==="network"&&manager&&lookup.global_access)actions.push({label:"Editar",icon:Pencil,onSelect:()=>profileForm(r)});
+    if(section==="dispatches"&&editor&&!r.legacy_id&&!["meta_daily_report","metafin_monthly","invoice_client"].includes(String(r.kind))&&r.status==="failed")actions.push({label:"Reintentar envío",icon:Send,onSelect:()=>setModal({title:"Reintentar envío",path:`/dispatches/${r.id}/retry`,fields:[],description:"Comprueba antes el proveedor: un nuevo envío puede duplicar el mensaje."})});
+    if(section==="liquidations") {
+      actions[0]={label:"Detalle y conciliación",icon:Eye,onSelect:()=>void showDetail(r)};
+      if(r.kind==="meta"&&r.status!=="cancelled") {
+        actions.push({label:"Excel META",icon:Download,onSelect:()=>void download(`/liquidations/${r.id}/meta-file/xlsx`,`${r.code||r.id}.xlsx`)},{label:"Carta META",icon:FileText,onSelect:()=>void download(`/liquidations/${r.id}/meta-file/letter`,`carta-${r.code||r.id}.pdf`)});
+        if(editor&&lookup.global_access)actions.push({label:"Enviar a META",icon:Send,onSelect:()=>setModal({title:"Enviar altas mensuales a META",path:`/liquidations/${r.id}/meta-send`,fields:[{name:"force",label:"Autorizar reenvío si ya existen intentos previos",type:"checkbox",optional:true}],description:"Se enviará un correo real con el Excel y la carta mensual. Comprueba la recepción antes de autorizar un reenvío."})});
+      }
+    }
     return actions;
   }
   const visible = section === "plans" || section === "network" ? data.items.filter(r => (JSON.stringify(r) + (section === "network" ? userName(r.user_id) : "")).toLowerCase().includes(query.toLowerCase())) : data.items;
@@ -206,20 +230,13 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     {section === "reports" && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{[["Emisiones", String(data.count || 0)], ["Ventas", money(data.sales)], ["Recaudado", money(data.collected)], ["Por cobrar", money(data.pending)], ["Comisiones", money(data.commissions)]].map(([title, value]) => <div className="rounded-xl border bg-card p-5" key={title}><p className="text-sm text-muted-foreground">{title}</p><p className="mt-2 text-2xl font-semibold">{value}</p></div>)}</div>}
     <section className="overflow-hidden rounded-xl border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b p-4">{["plans", "network", "emissions"].includes(section) ? <form className="flex gap-2" onSubmit={e => { e.preventDefault(); setQuery(search); setPage(0); }}><Input aria-label="Buscar registros" placeholder={section === "emissions" ? "Certificado, titular o documento" : "Buscar"} value={search} onChange={e => setSearch(e.target.value)} /><Button type="submit" variant="outline" size="icon" aria-label="Buscar"><Search className="size-4" /></Button></form> : <span className="text-sm text-muted-foreground">{data.total} registros</span>}<Button variant="outline" disabled={busy || loading || !data.items.length} onClick={() => void exportRows()}><Download className="size-4" /> Exportar página</Button></div>
-      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-muted/50"><tr>{columns[section].map(([name]) => <th className="whitespace-nowrap px-4 py-3 font-medium" key={name}>{name}</th>)}{section !== "reports" && <th className="px-4 py-3">Acciones</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={columns[section].length + 1} className="p-10 text-center text-muted-foreground">Cargando registros…</td></tr> : !visible.length ? <tr><td colSpan={columns[section].length + 1} className="p-12 text-center text-muted-foreground">No hay registros para mostrar.{editor && section !== "reports" && section !== "billing" ? " Usa la acción superior para comenzar." : ""}</td></tr> : visible.map((r, i) => <MedicalRow key={String(r.id || i)} actions={section === "emissions" ? emissionActions(r) : undefined}>{columns[section].map(([name, render]) => <td key={name} className="px-4 py-3">{render(r)}</td>)}{section !== "reports" && <td className={section === "emissions" ? "w-16 px-4 py-3" : "min-w-44 px-4 py-3"}><div className="flex flex-wrap gap-2">
-        {section === "plans" && manager && <Button size="sm" variant="outline" onClick={() => planForm(r)}>Editar</Button>}
-        {section === "network" && manager && lookup.global_access && <Button size="sm" variant="outline" onClick={() => profileForm(r)}>Editar</Button>}
-        {section === "emissions" && <RowActionsMenu label={String(r.code)} actions={emissionActions(r)} />}
-        {section === "billing" && <Button size="sm" variant="outline" onClick={() => setInvoiceId(Number(r.id))}>Historial y archivos</Button>}
-        {section === "billing" && lookup.can_configure_billing && ['blocked','uncertain'].includes(String(r.sunat_status)) && <Button size="sm" variant="outline" disabled={busy} onClick={async()=>{setBusy(true);try{await api.post(`/medical/billing/${r.id}/retry`);await load();setNotice('Revisión programada. Si el envío fue incierto, solo se consultará el CDR.');}catch(e){setError(errorText(e));}finally{setBusy(false);}}}>Revisar SUNAT</Button>}
-        {section === "billing" && editor && !r.legacy_id && r.status === "draft" && <Button size="sm" variant="outline" onClick={() => invoiceForm(r)}>Corregir</Button>}
-        {section === "dispatches" && editor && !r.legacy_id && !["meta_daily_report", "metafin_monthly", "invoice_client"].includes(String(r.kind)) && r.status === "failed" && <Button size="sm" variant="outline" onClick={() => setModal({ title: "Reintentar envío", path: `/dispatches/${r.id}/retry`, fields: [], description: "Comprueba antes el proveedor: si el intento anterior sí llegó, un nuevo envío duplicará el mensaje." })}>Reintentar</Button>}
-        {section === "liquidations" && r.kind === "meta" && r.status !== "cancelled" && <><Button size="sm" variant="outline" onClick={() => void download(`/liquidations/${r.id}/meta-file/xlsx`, `${r.code || r.id}.xlsx`)}>Excel META</Button><Button size="sm" variant="outline" onClick={() => void download(`/liquidations/${r.id}/meta-file/letter`, `carta-${r.code || r.id}.pdf`)}>Carta META</Button>{editor && lookup.global_access && <Button size="sm" variant="outline" onClick={() => setModal({title:"Enviar altas mensuales a META",path:`/liquidations/${r.id}/meta-send`,fields:[{name:"force",label:"Autorizar reenvío si ya existen intentos previos",type:"checkbox",optional:true}],description:"Se enviará un correo real al destinatario META configurado, con el Excel de altas y la carta mensual. Comprueba la recepción antes de autorizar un reenvío."})}>Enviar a META</Button>}</>}
-        {section === "liquidations" && <Button size="sm" variant="outline" onClick={() => void showDetail(r)}>Detalle y conciliación</Button>}
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-muted/50"><tr>{columns[section].map(([name]) => <th className="whitespace-nowrap px-4 py-3 font-medium" key={name}>{name}</th>)}{section !== "reports" && <th className="px-4 py-3">Acciones</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={columns[section].length + 1} className="p-10 text-center text-muted-foreground">Cargando registros…</td></tr> : !visible.length ? <tr><td colSpan={columns[section].length + 1} className="p-12 text-center text-muted-foreground">No hay registros para mostrar.{editor && section !== "reports" && section !== "billing" ? " Usa la acción superior para comenzar." : ""}</td></tr> : visible.map((r, i) => <MedicalRow key={String(r.id || i)} actions={rowActions(r)}>{columns[section].map(([name, render]) => <td key={name} className="px-4 py-3">{render(r)}</td>)}{section !== "reports" && <td className="w-16 px-4 py-3"><div className="flex flex-wrap gap-2">
+        <RowActionsMenu label={String(r.code || r.full_number || r.display_name || r.name || r.id || "registro")} actions={rowActions(r)} />
       </div></td>}</MedicalRow>)}</tbody></table></div>
       <footer className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"><span>{data.total} registros · {section === "plans" || section === "network" || section === "reports" ? "Listado completo" : `Página ${page + 1}`}</span>{!["plans", "network", "reports"].includes(section) && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={(page + 1) * 25 >= data.total || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button></div>}</footer>
     </section>
-    {letterPreview && <Dialog open onOpenChange={open=>{if(!open)setLetterPreview(null);}}><DialogContent className="max-w-5xl"><DialogHeader><DialogTitle>Carta · {letterPreview.code}</DialogTitle><DialogDescription>Documento del programa de asistencia.</DialogDescription></DialogHeader><iframe title="Carta de bienvenida" src={letterPreview.url} className="h-[75vh] w-full rounded-lg border" /></DialogContent></Dialog>}
+    {recordPreview && <Dialog open onOpenChange={open=>{if(!open)setRecordPreview(null);}}><DialogContent><DialogHeader><DialogTitle>{titles[section]} · Detalle</DialogTitle><DialogDescription>Consulta del registro seleccionado.</DialogDescription></DialogHeader><dl className="space-y-4">{columns[section].map(([label,render])=><div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="break-words font-medium">{render(recordPreview)}</dd></div>)}</dl></DialogContent></Dialog>}
+    {letterPreview && <Dialog open onOpenChange={open=>{if(!open)setLetterPreview(null);}}><DialogContent className="sm:max-w-5xl"><DialogHeader><DialogTitle>{letterPreview.code}</DialogTitle><DialogDescription>Documento del programa de asistencia.</DialogDescription></DialogHeader><iframe title="Documento del programa" src={letterPreview.url} className="h-[75vh] w-full rounded-lg border" /></DialogContent></Dialog>}
     {delivery && <EmissionDelivery row={{id:Number(delivery.id),code:String(delivery.code),token:String(delivery.token),email:String(delivery.email||""),phone:String(delivery.phone||""),test_batch:delivery.test_batch?String(delivery.test_batch):null}} close={()=>setDelivery(null)}/>}
     {invoiceId !== null && <BillingHistory key={invoiceId} id={invoiceId} close={() => setInvoiceId(null)} download={download} />}
     {modal?.path === "/liquidations" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(section!=="liquidations"); }} />}
@@ -276,7 +293,7 @@ function EmissionPicker({ section, selected }: { section: string; selected?: Val
 }
 
 function MedicalRow({actions, children}: {actions?: RowAction[]; children: ReactNode}) {
-  const row = <tr className="border-t hover:bg-muted/30" tabIndex={actions ? 0 : undefined} title={actions ? "Doble clic para abrir la carta · Clic derecho para opciones" : undefined}
+  const row = <tr className="border-t hover:bg-muted/30" tabIndex={actions ? 0 : undefined} title={actions ? "Doble clic para abrir · Clic derecho para opciones" : undefined}
     onDoubleClick={event => {if (!(event.target as HTMLElement).closest('button,a,input,[role="menuitem"]')) actions?.[0]?.onSelect();}}
     onKeyDown={event => {if (event.key === "Enter" && event.target === event.currentTarget) {event.preventDefault();actions?.[0]?.onSelect();}}}>{children}</tr>;
   return actions ? <RecordContextMenu actions={actions}>{row}</RecordContextMenu> : row;
