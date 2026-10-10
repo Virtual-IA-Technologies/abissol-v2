@@ -749,17 +749,13 @@ def deliver(db, request, user, row, emission, real_test=False):
                 invoice_attachment=receipt(db,emission)
                 if invoice_attachment:attachments.append(invoice_attachment)
             body,html_body=welcome_message(db,emission,url,condition_available=bool(conditioned))
-            if emission.test_batch:
-                body='PRUEBA — NO ACREDITA COBERTURA REAL\n\n'+body
-                html_body='<p><strong>PRUEBA — NO ACREDITA COBERTURA REAL</strong></p>'+html_body
-            send_email(db,row.recipient,('PRUEBA · ' if emission.test_batch else '')+f'Bienvenido a ABISSOL · {emission.plan_name}',body,html=html_body,attachments=attachments)
+            send_email(db,row.recipient,f'Bienvenido a ABISSOL · {emission.plan_name}',body,html=html_body,attachments=attachments)
 
         else:
             body = insured_message(db, emission, row.channel, url)
             if row.kind=='insured_auto':
                 from ..services.medical_public_links import document_url
                 body+='\n\nCarta de bienvenida:\n'+document_url(emission,'letter')
-            if emission.test_batch:body='PRUEBA — NO ACREDITA COBERTURA REAL\n\n'+body
             send_whatsapp(db, row.recipient, body)
         row.status = "sent"
     except Exception:

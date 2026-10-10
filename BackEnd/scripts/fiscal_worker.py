@@ -18,6 +18,8 @@ def run():
     finally:
         from app.services.medical_auto_delivery import run_pending
         print('Automatic document deliveries checked:',run_pending())
+        from app.services.medical_meta_schedule import run as run_meta
+        print('META schedule:',run_meta())
 
 if __name__ == '__main__':
     run()

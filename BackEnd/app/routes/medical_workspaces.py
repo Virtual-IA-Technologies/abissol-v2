@@ -25,7 +25,8 @@ META_KIND = "meta_daily_report"
 
 @router.get("/emission-settings")
 def get_configuration(db: Session = Depends(get_db), user=Depends(communication_programmer)):
-    return {**business_settings(db), "automatic_dispatch_active": False}
+    values=business_settings(db)
+    return {**values, "automatic_dispatch_active": values['meta_auto_enabled']}
 
 
 @router.put("/emission-settings")
@@ -34,9 +35,16 @@ def put_configuration(payload: BusinessSettingsInput, request: Request, db: Sess
     row = db.get(MedicalBusinessSetting, 1) or MedicalBusinessSetting(id=1)
     row.values = payload.model_dump()
     db.add(row)
+    if payload.meta_auto_enabled and not before.get('meta_auto_enabled'):
+        from datetime import datetime, timezone
+        from ..services.medical_meta_schedule import due_slot
+        slot=due_slot(row.values,datetime.now(timezone.utc))
+        state=db.get(MedicalBusinessSetting,2) or MedicalBusinessSetting(id=2)
+        state.values={'actor_id':user.id,'last_slot':slot.isoformat() if slot else ''}
+        db.add(state)
     audit_change(db, request, user, "medical_business_settings", 1, before=before, after=row.values)
     db.commit()
-    return {**row.values, "automatic_dispatch_active": False}
+    return {**row.values, "automatic_dispatch_active": row.values['meta_auto_enabled']}
 
 
 def meta_access(user):
@@ -105,6 +113,7 @@ def meta_export(payload: MetaSelection, db: Session = Depends(get_db), user=Depe
 
 
 def send_meta(db, request, user, emissions, kind, force=False, liquidation=None):
+    if not emissions:return {'status':'empty','count':0}
     recipient = business_settings(db)["metafin_email"]
     if not recipient:
         raise HTTPException(422, "Configura el correo META en Emisiones / Configuración")
@@ -114,9 +123,10 @@ def send_meta(db, request, user, emissions, kind, force=False, liquidation=None)
         raise HTTPException(422, "Configura y activa el correo SMTP antes de enviar a META") from exc
     query = db.query(m.Dispatch).filter(m.Dispatch.kind == kind)
     query = query.filter(m.Dispatch.liquidation_id == liquidation.id) if liquidation else query.filter(m.Dispatch.issuance_id.in_([e.id for e in emissions]))
-    if query.filter(m.Dispatch.status == "sending").first():
+    if query.filter(m.Dispatch.status == "sending").with_for_update().first():
         raise HTTPException(409, "Existe un envío en curso; revisa su resultado antes de repetir")
-    if not force and query.filter(m.Dispatch.status.in_(["sent", "uncertain", "failed"])).first():
+    previous=query.filter(m.Dispatch.status.in_(["sent", "uncertain", "failed"])).with_for_update().first()
+    if not force and previous:
         raise HTTPException(409, "Hay envíos previos. Revisa el historial y confirma expresamente el reenvío")
     content = meta_xlsx(emissions, db, monthly=liquidation is not None)
     rows = [m.Dispatch(issuance_id=e.id, liquidation_id=liquidation.id if liquidation else None,
@@ -129,8 +139,15 @@ def send_meta(db, request, user, emissions, kind, force=False, liquidation=None)
         attachments = [("altas-meta.xlsx", content, MIME)]
         if liquidation:
             attachments.append(("carta-meta.pdf", monthly_letter(liquidation, len(emissions)), "application/pdf"))
-        send_email(db, recipient, f"ABISSOL · Altas HAMPI · {liquidation.code if liquidation else 'Reporte diario'}",
-                   f"Estimados META: adjuntamos {len(emissions)} altas HAMPI de ABISSOL para su registro.", attachments=attachments)
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        moment=datetime.now(ZoneInfo('America/Lima'))
+        resend=bool(force and previous)
+        subject=('REENVÍO ' if resend else '')+f"ABISSOL - Nuevas emisiones asistenciales para META ({len(emissions)})"
+        body=('Estimados señores META,\n\n'+('Adjuntamos nuevamente' if resend else 'Adjuntamos')+
+              ' la lista de emisiones asistenciales ABISSOL para su revisión y registro.\n\n'+
+              f'Lote: META-{moment:%Y%m%d-%H%M%S}\nCantidad de registros: {len(emissions)}\nFecha de envío: {moment:%d/%m/%Y %H:%M}\n\nAtentamente,\nABISSOL')
+        send_email(db, recipient, subject, body, attachments=attachments)
         status, error = "sent", ""
     except Exception:
         status, error = "uncertain", "SMTP no confirmó el resultado. Verifica la recepción antes de reenviar."

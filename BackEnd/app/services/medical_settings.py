@@ -1,6 +1,6 @@
 import json
 from string import Formatter
-from pydantic import Field, EmailStr, TypeAdapter, field_validator
+from pydantic import Field, EmailStr, TypeAdapter, field_validator, model_validator
 from ..schemas.medical import Payload
 from ..models.medical import MedicalBusinessSetting
 from ..models.legacy import LegacyRecord
@@ -12,8 +12,16 @@ DEFAULT_MESSAGE = "Hola {nombre}. Bienvenido a ABISSOL. Programa {plan}, certifi
 class BusinessSettingsInput(Payload):
     metafin_email: str = Field(default="", max_length=180)
     daily_dispatch_time: str = Field(default="08:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    evening_dispatch_time: str = Field(default="21:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
+    meta_auto_enabled: bool = False
     insured_email_template: str = Field(default="", max_length=5000)
     insured_whatsapp_template: str = Field(default="", max_length=4000)
+
+    @model_validator(mode='after')
+    def schedule(self):
+        if self.meta_auto_enabled and (not self.metafin_email or self.daily_dispatch_time>=self.evening_dispatch_time):
+            raise ValueError('Configura destinatarios META y un segundo corte posterior al primero')
+        return self
 
     @field_validator("metafin_email")
     @classmethod

@@ -122,11 +122,14 @@ class WorkspaceTests(unittest.TestCase):
             self.assertEqual(len(xml.findall(".//s:f",ns)),0)
             self.assertIn("=SUM(A1:A2)",archive.read("xl/worksheets/sheet1.xml").decode())
         with patch("app.routes.medical_workspaces.send_email") as send:
-            self.assertEqual(self.post("/meta-dispatches/send",selection)["status"],"sent")
+            self.assertEqual(self.post("/meta-dispatches/send",{**selection,"force":True})["status"],"sent")
+            self.assertFalse(send.call_args.args[2].startswith("REENV"))
+            self.assertEqual(len(send.call_args.kwargs["attachments"]),1)
             self.post("/meta-dispatches/send",selection,409)
             self.assertEqual(send.call_count,1)
             self.post("/meta-dispatches/send",{**selection,"force":True})
             self.assertEqual(send.call_count,2)
+            self.assertTrue(send.call_args.args[2].startswith("REENV"))
         self.assertEqual(self.client.get(API+"/meta-dispatches",headers=self.headers).json()["total"],0)
         monthly=self.post("/liquidations",self.period(emission,"meta"))
         for kind,signature in [("xlsx",b"PK"),("letter",b"%PDF")]:
@@ -150,6 +153,35 @@ class WorkspaceTests(unittest.TestCase):
             result=self.post("/meta-dispatches/send",{"issuance_ids":[emission["id"]]})
         self.assertEqual(result["status"],"uncertain")
         self.post("/meta-dispatches/send",{"issuance_ids":[emission["id"]]},409)
+
+    def test_meta_schedule_cutoffs_pending_only(self):
+        from datetime import datetime, timezone
+        from app.services.medical_meta_schedule import process
+        first=self.setup_emission();second=self.issuance(document_number="87654321")
+        test=self.issuance(document_number="12348765")
+        self.configure()
+        with self.sessions() as db:
+            db.get(MedicalBusinessSetting,1).values={"metafin_email":"meta@example.com","meta_auto_enabled":True,"daily_dispatch_time":"11:00","evening_dispatch_time":"21:00"}
+            db.add(MedicalBusinessSetting(id=2,values={"actor_id":self.admin_id}))
+            for emission,hour in ((first,15),(second,17),(test,15)):
+                db.get(MedicalIssuance,emission["id"]).created_at=datetime(2026,10,9,hour)
+            db.get(MedicalIssuance,test["id"]).test_batch="PRUEBA-schedule"
+            db.commit()
+        def run(day,hour,minute=0):
+            with self.sessions() as db:
+                return process(db,datetime(2026,10,day,hour,minute,tzinfo=timezone.utc))
+        with patch("app.routes.medical_workspaces.send_email") as send:
+            self.assertEqual(run(9,15,59)["status"],"waiting")
+            self.assertEqual(run(9,16)["count"],1)
+            self.assertEqual(run(9,16)["status"],"checked")
+            self.assertEqual(run(10,2)["count"],1)
+            self.assertEqual(run(10,16)["status"],"empty")
+            self.assertEqual(send.call_count,2)
+            for call in send.call_args_list:
+                self.assertFalse(call.args[2].startswith("REENV"))
+                self.assertEqual(len(call.kwargs["attachments"]),1)
+        with self.sessions() as db:
+            self.assertEqual(db.query(MedicalDispatch).filter_by(issuance_id=test["id"],kind="meta_daily_report").count(),0)
 
     def test_original_names_are_preserved_for_meta(self):
         emission=self.setup_emission()

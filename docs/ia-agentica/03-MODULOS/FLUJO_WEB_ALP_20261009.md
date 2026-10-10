@@ -102,3 +102,26 @@ En pruebas solo se contacta a destinatarios de la lista autorizada; los demás
 quedan Simulados. Sin contacto registrado no se crea envío para ese canal.
 Conserva lote de pruebas, numeradores reales y bloqueo SUNAT. Activación sin
 mensajes retrospectivos ni cambio a operación definitiva.
+
+## SMTP y cortes META
+
+Remitente: contacto@abissol.org, Asociación de Bienestar, Inclusión, Salud y
+Solidaridad. SMTP mail.abissol.org:587 con STARTTLS; autenticación verificada,
+contraseña cifrada en configuración privada, nunca en repositorio.
+
+META automático a las 11:00 y 21:00 America/Lima, configurable por Programador.
+Solo emisiones reales vigentes en registro (estado issued), creadas hasta el corte
+y sin intentos previos. Excluye pruebas y anuladas; sin pendientes no envía correo.
+MedicalBusinessSetting id=2 conserva actor y último corte, sin crear tablas.
+La reserva de envíos se confirma antes de SMTP. Los resultados inciertos requieren
+revisión manual; no se reintentan automáticamente. La activación comienza en el
+próximo corte, sin disparar un correo inmediato.
+
+Primer envío sin prefijo REENVÍO incluso si se marcó forzar. Se conserva Excel de
+altas con 11 columnas y, para liquidación mensual, Excel de 8 columnas y carta PDF,
+equivalentes al flujo Laravel. No se envían pruebas a META.
+
+Se retiró la etiqueta PRUEBA añadida a asunto/cuerpo de confirmación; los códigos
+y documentos de prueba mantienen su identificación y el bloqueo SUNAT continúa.
+Pruebas focalizadas: cortes, exclusión de pruebas, deduplicación, adjuntos diario y
+mensual, resultado SMTP incierto y entrega permitida: 4 pruebas correctas.

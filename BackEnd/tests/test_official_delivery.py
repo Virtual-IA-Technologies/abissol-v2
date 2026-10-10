@@ -51,8 +51,8 @@ class OfficialDeliveryTests(LocalTestModeTests):
             result=self.client.post(API+path,headers=self.headers,json={'email':True,'whatsapp':True,'recipient_email':'approved@example.com','recipient_phone':'51998896625','real_test':True})
             self.assertEqual(result.status_code,200,result.text)
             self.assertTrue(all(r['status']=='sent' for r in result.json()['data']))
-            self.assertIn('PRUEBA',mail.call_args.args[2]);self.assertIn('abissol.org/?consulta=',mail.call_args.kwargs['html'])
-            self.assertIn('PRUEBA',whatsapp.call_args.args[2])
+            self.assertTrue(mail.call_args.args[2].startswith('Bienvenido'));self.assertIn('abissol.org/?consulta=',mail.call_args.kwargs['html'])
+            self.assertFalse(whatsapp.call_args.args[2].startswith('PRUEBA —'))
             duplicate=self.client.post(API+path,headers=self.headers,json={'email':True,'recipient_email':'approved@example.com','real_test':True})
             self.assertEqual(duplicate.status_code,409)
             with self.sessions() as db:
