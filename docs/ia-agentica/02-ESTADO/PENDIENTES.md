@@ -6,9 +6,14 @@ La [revisión por opción](../03-MODULOS/REVISION_CORTE_20261009.md) reemplaza
 las listas iniciales siguientes como diagnóstico de preparación. **No retirar
 Laravel todavía:** faltan operaciones fiscales (notas/anulación/CDR histórico),
 continuidad de seis liquidaciones importadas abiertas, corrección de emisiones,
-consulta pública por código/DNI, numeración definitiva y cambio productivo ALP.
+numeración definitiva y habilitación productiva posterior a las pruebas ALP.
 Navegación y 21 pruebas focalizadas aprobadas; servicios externos reales y
 aceptación SUNAT no se ejecutaron en esta auditoría. V2 sigue en modo pruebas.
+
+Actualización posterior: consulta oficial por código/DNI y QR implementada y
+probada. ALP `/abissol/` y `/emitir/` ya apuntan a V2 con lote de pruebas activo;
+correo y WhatsApp de prueba aceptados por sus proveedores para los destinatarios
+autorizados. SUNAT continúa desactivado. Ver [entrega del flujo oficial](../03-MODULOS/FLUJO_WEB_ALP_20261009.md).
 
 - Aceptación del piloto por el usuario: https://v2.abissol.org/.
 - Definir e implementar la funcionalidad ABISSOL en una etapa posterior.

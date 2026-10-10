@@ -29,6 +29,8 @@ replace("      if (item.isValid && item.conditionedUrl) {", "      if (!item.isC
 replace("if (!/^[0-9]{8,12}$/.test(documentNumber))", "if (!/^[A-Za-z0-9_-]{6,100}$/.test(documentNumber))")
 replace("Ingresa un documento válido. Solo números, entre 8 y 12 dígitos.", "Ingresa un documento o código de verificación válido.")
 replace("input.value = input.value.replace(/\\D/g, '').slice(0, 12);", "input.value = input.value.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100);")
+replace("document_number: String(value || '').replace(/\\D/g, '').slice(0, 12)", "document_number: String(value || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 100)")
+replace('maxlength="12"', 'maxlength="100"')
 start=s.index('    function decodeConsultaParam(value)')
 end=s.index('\n    }',start)+6
 piece=s[start:end]

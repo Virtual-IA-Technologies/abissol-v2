@@ -21,3 +21,24 @@ Validación previa: seis pruebas aisladas de documentos, consulta y comunicacion
 TypeScript correcto. Las pruebas de proveedores usan únicamente los destinatarios
 autorizados por el usuario. Las brechas fiscales y liquidaciones históricas del
 informe de corte siguen pendientes; esta entrega no autoriza retirar Laravel.
+
+## Resultado publicado
+
+Backend/frontend desplegados en `bd57548`; web y adaptador activados después
+de comprobar hashes contra los originales respaldados. Web: QR automático,
+recarga conservando código y descargas comprobados en navegador sin errores.
+V2: modal y ambos canales comprobados. Dos cartas de prueba actualizadas como
+nuevas versiones; ningún original real reescrito. Prueba real autorizada de
+correo y WhatsApp registrada como `sent` (aceptación del proveedor, no acuse del
+destinatario). Sin variación de correlativos ni trabajos SUNAT.
+
+ALP: catálogo de dos planes, 59 perfiles y cinco emisiones consultados con el
+adaptador normal; validación completa de emisión con rollback. No se creó CAT
+ni se probó su facturación. `/abissol-pruebas/` permanece como portal auxiliar;
+el flujo habitual está en `/abissol/`. El conector regular está limitado al
+origen externa_alp; configuración y credenciales permanecen fuera de Git.
+
+Respaldo privado: `/root/abissol-cutover-20261009/`. Para revertir el destino ALP,
+retirar su override privado `/home/alp/.abissol-v2-config.php`; los cambios de
+adaptador son condicionales. Para revertir la web, restaurar `site/index.before.php`
+con propietario abissol. No revertir datos ni correlativos automáticamente.
