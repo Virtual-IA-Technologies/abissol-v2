@@ -34,9 +34,12 @@ class OfficialDeliveryTests(LocalTestModeTests):
             row=response.json()['data'][0]
             self.assertTrue(row['is_test']);self.assertFalse(row['valid'])
             self.assertEqual(row['document_number'],'12****78')
+            self.assertEqual(row['document_display'],sale['document_number'])
             url=row['public_verification_url'];encoded=url.split('consulta=')[1]
             self.assertEqual(json.loads(base64.urlsafe_b64decode(encoded+'='*(-len(encoded)%4)))['code'],sale['token'])
             self.assertEqual(self.client.get(API+'/public/search',params={'code':sale['token']}).status_code,200)
+            self.assertEqual(self.client.get(API+'/public/search',params={'code':sale['token']}).json()['data'][0]['document_display'],sale['document_number'])
+            self.assertEqual(self.client.get(API+'/public/search',params={'code':sale['code']}).json()['data'][0]['document_display'],'12****78')
             self.assertEqual(self.client.get(API+'/public/search',params={'q':'unknown-code'}).status_code,404)
             self.assertEqual(self.client.get(API+'/public/search',params={'q':"' OR 1=1"}).status_code,422)
             self.assertTrue(row['welcome_letter_url'].endswith('/letter'))

@@ -75,3 +75,13 @@ acciones de fila para menú vertical, clic derecho y doble clic de consulta.
 Las operaciones de cobro, anulación y envío conservan permisos y confirmaciones.
 El detalle genérico de tablas de plataforma también abre lateralmente; los
 paneles existentes de usuarios, roles y auditoría conservan su comportamiento.
+
+## Consulta pública: documento y estados
+
+El QR conserva su token en el enlace, sin mostrarlo en el campo de documento.
+La API devuelve el documento completo únicamente cuando se consulta con el
+token exacto del QR o con ese mismo documento; por código corto sigue enmascarado.
+La página rellena el documento recibido y conserva el enlace al recargar.
+Vigencia futura y pruebas usan celeste; vigentes, verde; vencidos y no encontrados,
+neutro; anulados y errores, rojo. Sin alterar fechas ni declarar cobertura futura
+como activa. Se evita enviar consultas simultáneas desde el botón Buscar.

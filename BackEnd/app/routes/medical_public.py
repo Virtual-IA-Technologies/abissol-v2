@@ -39,6 +39,7 @@ def search(q:str=Query('',max_length=100),code:str=Query('',max_length=100),dni:
         conditions=row.conditions_url or (plan.conditions_url if plan else '')
         items.append({'exists':True,'valid':state=='valid','is_test':bool(row.test_batch),'status':row.status,'status_public':state,'status_label':label,'message':label,
             'code':row.code,'document_number':row.document_number[:2]+'****'+row.document_number[-2:],
+            'document_display':row.document_number if value in (row.token,row.document_number) else row.document_number[:2]+'****'+row.document_number[-2:],
             'insured_name':row.customer,'plan':row.plan_name,'starts_at':str(row.starts_on),'ends_at':str(row.ends_on),
             'public_verification_url':verification_url(row),'welcome_letter_url':document_url(row,'letter') if row.status=='issued' else '',
             'conditioned_url':document_url(row,'conditions') if (conditions or row.plan_id in conditioned_plans) and row.status=='issued' else ''})
