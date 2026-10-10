@@ -68,4 +68,6 @@ def create_sale(db, payload, emitter, actor_id):
     db.add(row)
     db.flush()
     fiscal.enqueue_boleta(db,row)
+    from .medical_auto_delivery import enqueue
+    enqueue(db,row,actor_id)
     return row

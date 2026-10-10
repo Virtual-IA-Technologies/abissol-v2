@@ -744,6 +744,10 @@ def deliver(db, request, user, row, emission, real_test=False):
             attachments=[('carta-bienvenida-abissol.pdf',attachment,'application/pdf')]
             conditioned=conditions_file(db,emission)
             if conditioned:attachments.append((conditioned[1],conditioned[0].read_bytes(),conditioned[2]))
+            if row.kind=='insured_auto':
+                from ..services.medical_auto_delivery import receipt
+                invoice_attachment=receipt(db,emission)
+                if invoice_attachment:attachments.append(invoice_attachment)
             body,html_body=welcome_message(db,emission,url,condition_available=bool(conditioned))
             if emission.test_batch:
                 body='PRUEBA — NO ACREDITA COBERTURA REAL\n\n'+body
@@ -752,6 +756,9 @@ def deliver(db, request, user, row, emission, real_test=False):
 
         else:
             body = insured_message(db, emission, row.channel, url)
+            if row.kind=='insured_auto':
+                from ..services.medical_public_links import document_url
+                body+='\n\nCarta de bienvenida:\n'+document_url(emission,'letter')
             if emission.test_batch:body='PRUEBA — NO ACREDITA COBERTURA REAL\n\n'+body
             send_whatsapp(db, row.recipient, body)
         row.status = "sent"

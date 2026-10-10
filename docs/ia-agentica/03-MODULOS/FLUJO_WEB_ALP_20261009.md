@@ -85,3 +85,20 @@ La página rellena el documento recibido y conserva el enlace al recargar.
 Vigencia futura y pruebas usan celeste; vigentes, verde; vencidos y no encontrados,
 neutro; anulados y errores, rojo. Sin alterar fechas ni declarar cobertura futura
 como activa. Se evita enviar consultas simultáneas desde el botón Buscar.
+
+## Envío automático de nuevas emisiones
+
+La configuración privada `automatic_documents_enabled` activa una cola de
+comunicaciones dentro de la transacción común de venta interna/externa.
+Las validaciones con rollback y los reintentos de la referencia externa no
+duplican envíos. No se envían registros históricos al activar la opción.
+El trabajador programado cada minuto procesa la cola fuera de la petición:
+correo con carta, condicionado disponible y comprobante PDF; WhatsApp con
+confirmación, consulta oficial y enlace a la carta. Espera el PDF si está pendiente.
+Errores y resultados quedan en Envíos; no se repiten intentos inciertos automáticamente.
+Un corte durante un envío puede dejarlo En curso y exige revisar el proveedor.
+
+En pruebas solo se contacta a destinatarios de la lista autorizada; los demás
+quedan Simulados. Sin contacto registrado no se crea envío para ese canal.
+Conserva lote de pruebas, numeradores reales y bloqueo SUNAT. Activación sin
+mensajes retrospectivos ni cambio a operación definitiva.

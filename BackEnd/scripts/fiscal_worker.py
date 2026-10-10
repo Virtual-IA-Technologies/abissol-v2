@@ -10,10 +10,14 @@ from app.utils.time import utc_now
 def run():
     with SessionLocal() as db:
         ids = [row.id for row in db.query(FiscalJob.id).filter(FiscalJob.state.in_(['queued','sending','uncertain']),FiscalJob.next_attempt_at <= utc_now()).order_by(FiscalJob.id).limit(20)]
-    for ident in ids:
-        with SessionLocal() as db:
-            process_job(db,ident)
-    print('Fiscal jobs checked:',len(ids))
+    try:
+        for ident in ids:
+            with SessionLocal() as db:
+                process_job(db,ident)
+        print('Fiscal jobs checked:',len(ids))
+    finally:
+        from app.services.medical_auto_delivery import run_pending
+        print('Automatic document deliveries checked:',run_pending())
 
 if __name__ == '__main__':
     run()

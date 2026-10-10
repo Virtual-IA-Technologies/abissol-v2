@@ -43,6 +43,9 @@ def business_settings(db):
 
 
 def insured_message(db, emission, channel, url, *, settings=None):
+    from .medical_information import conditions_file
+    from .medical_public_links import document_url
     template = (settings if settings is not None else business_settings(db))["insured_email_template" if channel == "email" else "insured_whatsapp_template"] or DEFAULT_MESSAGE
+    conditioned=document_url(emission,'conditions') if conditions_file(db,emission) else emission.conditions_url
     return template.format(nombre=emission.customer, plan=emission.plan_name, certificado=emission.code,
-                           inicio=emission.starts_on, fin=emission.ends_on, enlace=url, condicionado=emission.conditions_url or "Consultar con ABISSOL")
+                           inicio=emission.starts_on, fin=emission.ends_on, enlace=url, condicionado=conditioned or "Consultar con ABISSOL")
