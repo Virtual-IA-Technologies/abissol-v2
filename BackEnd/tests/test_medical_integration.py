@@ -124,7 +124,7 @@ class IntegrationTests(unittest.TestCase):
         period={'period_start':first['data']['sale_date'],'period_end':first['data']['sale_date']}
         result=self.client.get(API+'/liquidations/pending-issuances',params=period,headers=self.connector_headers)
         self.assertEqual(result.status_code,200,result.text)
-        self.assertEqual(result.json()['data']['items'][0]['deposit'],'12.00')
+        self.assertEqual(result.json()['data']['items'][0]['deposit'],'55.00')
 
     def test_other_source_cannot_read_emission(self):
         payload=self.setup_connector()

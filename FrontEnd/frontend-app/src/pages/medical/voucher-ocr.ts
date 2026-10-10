@@ -1,3 +1,18 @@
+export async function optimizeVoucher(file:File):Promise<File> {
+  if(file.size>20*1024*1024)throw Error('El archivo supera 20 MB.');
+  if(file.type==='application/pdf')return file;
+  const image=await createImageBitmap(file);
+  try {
+    const scale=Math.min(1,2400/Math.max(image.width,image.height));
+    const canvas=document.createElement('canvas');canvas.width=Math.round(image.width*scale);canvas.height=Math.round(image.height*scale);
+    const ctx=canvas.getContext('2d')!;ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality='high';ctx.drawImage(image,0,0,canvas.width,canvas.height);
+    const blob=await new Promise<Blob|null>(resolve=>canvas.toBlob(resolve,'image/jpeg',0.9));
+    if(!blob||(scale===1&&blob.size>=file.size))return file;
+    return new File([blob],file.name.replace(/\.[^.]+$/,'')+'.jpg',{type:'image/jpeg'});
+  } finally {image.close();}
+}
+
 export async function readVoucher(file:File,progress:(text:string)=>void):Promise<string> {
   if(file.size>5*1024*1024)throw Error('El voucher debe pesar como máximo 5 MB.');
   const {createWorker}=await import('tesseract.js');

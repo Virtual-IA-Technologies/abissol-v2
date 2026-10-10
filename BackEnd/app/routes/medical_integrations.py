@@ -209,8 +209,7 @@ def pending(period_start:date,period_end:date,db:Session=Depends(get_db),identit
     rows=query.filter(MedicalIssuance.sale_date.between(period_start,period_end),MedicalIssuance.payment_status!='pending',~MedicalIssuance.id.in_(active.scalar_subquery())).order_by(MedicalIssuance.id).limit(1001).all()
     if len(rows)>1000:
         raise HTTPException(422,"Reduce el período a un máximo de 1000 emisiones")
-    afocat=m.afocat_emissions(db,rows,'seller')
-    return {"data":{"items":[{"issuance_id":external_id(e),"internal_code":e.code,"commission":str(e.seller_commission),"deposit":str(m.liquidation_amounts(e,'seller',afocat)[1])} for e in rows]}}
+    return {"data":{"items":[{"issuance_id":external_id(e),"internal_code":e.code,"commission":str(e.seller_commission),"deposit":str(m.liquidation_amounts(e,'seller')[1])} for e in rows]}}
 
 
 @router.get("/billing/from-issuance/{ident}")

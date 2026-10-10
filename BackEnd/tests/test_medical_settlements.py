@@ -43,6 +43,13 @@ class SettlementTests(unittest.TestCase):
             db.add(SmtpSetting(host='smtp.example.com',from_email='test@example.com',is_active=True));db.commit()
         pending=self.client.get(API+'/seller-pending',params={'responsible_id':self.profile_id},headers=self.headers)
         self.assertEqual([i['id'] for i in pending.json()['items']],[sale['id']])
+        unpaid=self.issuance(document_number='87654321',payment_status='pending')
+        sample=self.issuance(document_number='12348765')
+        with self.sessions() as db:
+            db.get(MedicalIssuance,sample['id']).test_batch='PRUEBA-pending';db.commit()
+        pending=self.client.get(API+'/seller-pending',headers=self.headers).json()['items']
+        self.assertEqual({i['id'] for i in pending},{sale['id'],unpaid['id'],sample['id']})
+        self.assertEqual({i['id'] for i in pending if i['eligible']},{sale['id'],unpaid['id']})
         data={'responsible_id':self.profile_id,'issuance_ids':json.dumps([sale['id']]),'amount':'54','reference':'OP-NEW-001','paid_on':sale['sale_date'],'bank':'BCP','note':'Deposito del vendedor','ocr_text':'Monto S/ 55.00'}
         files={'file':('voucher.pdf',b'%PDF-1.7 new voucher','application/pdf')}
         with patch('app.services.medical_settlement_delivery.send_email') as mail:
@@ -70,6 +77,20 @@ class SettlementTests(unittest.TestCase):
             self.assertEqual(db.get(MedicalIssuance,sale['id']).payment_status,'settled')
             self.assertIsNotNone(db.query(MedicalVoucher).one().verified_at)
             self.assertEqual(db.query(MedicalDispatch).filter_by(kind='settlement_office').count(),1)
+        from app.models.legacy import MedicalBillingConfiguration
+        from app.utils.secrets import encrypt_secret
+        with self.sessions() as db:
+            db.add(MedicalBillingConfiguration(payload_encrypted=encrypt_secret(json.dumps({'test_batch':'PRUEBA-pending'}))));db.commit()
+        baseline=self.client.get(API+'/seller-statements',headers=self.headers).json()
+        data.update(issuance_ids=json.dumps([sample['id'],unpaid['id']]),amount='110',reference='TEST-ONLY')
+        with patch('app.services.medical_settlement_delivery.send_email') as mail:
+            self.assertEqual(self.client.post(API+'/seller-settlements',data=data,files=files,headers=self.headers).status_code,422)
+            data.update(issuance_ids=json.dumps([sample['id']]),amount='55')
+            response=self.client.post(API+'/seller-settlements',data=data,files={'file':('test.pdf',b'%PDF-1.7 simulated voucher','application/pdf')},headers=self.headers)
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertTrue(response.json()['code'].startswith('PRUEBA-'))
+            self.assertEqual(response.json()['notification_status'],'simulated');mail.assert_not_called()
+        self.assertEqual(self.client.get(API+'/seller-statements',headers=self.headers).json(),baseline)
 
     def test_partial_deposits_close_and_later_commission(self):
         self.setup_sale();first=self.voucher(20);self.action('submit');self.action('approve');self.action('pay',422)

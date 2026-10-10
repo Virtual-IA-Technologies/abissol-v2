@@ -14,13 +14,19 @@ from . import medical as m
 router=APIRouter(prefix='/medical')
 
 @router.get('/seller-pending')
-def pending(responsible_id:int,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','editor'))):
-    from types import SimpleNamespace
-    from datetime import date
-    payload=SimpleNamespace(kind='seller',responsible_id=responsible_id,starts_on=date(1900,1,1),ends_on=date(2100,1,1),issuance_ids=None)
-    result=m.preview_liquidation(payload,db,user)
-    result['items']=[i for i in result['items'] if Decimal(i['deposit'])>0]
-    return {'items':result['items']}
+def pending(responsible_id:int|None=None,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','editor'))):
+    own=m.profile(db,user)
+    if not m.admin(user) and (not own or own.kind=='emitter'):raise HTTPException(403,'Tu perfil no prepara liquidaciones')
+    query=m.scope(db,user).filter(m.Issuance.status=='issued',m.Issuance.payment_status.in_(['pending','collected_by_seller']))
+    if responsible_id:
+        m.find(m.profiles_scope(db,user).filter(m.Profile.kind=='responsible'),responsible_id)
+        query=query.filter(m.Issuance.responsible_id==responsible_id)
+    used=db.query(m.Item.issuance_id).filter(m.Item.active_key.like('seller:%'))
+    rows=query.filter(~m.Issuance.id.in_(used.scalar_subquery())).order_by(m.Issuance.id.desc()).limit(1000).all()
+    from ..services.medical_testing import batch
+    current_batch=batch(db)
+    return {'items':[{**m.dump(e),'deposit':str(m.liquidation_amounts(e,'seller')[1]),
+        'eligible':not e.test_batch or e.test_batch==current_batch} for e in rows]}
 
 @router.post('/seller-settlements')
 async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_ids:str=Form(...),
@@ -44,13 +50,22 @@ async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_
     try:get_smtp_setting(db)
     except EmailNotConfigured:raise HTTPException(422,'Configura el correo SMTP antes de enviar')
     payload=SimpleNamespace(kind='seller',responsible_id=responsible_id,starts_on=date(1900,1,1),ends_on=date(2100,1,1),issuance_ids=ids)
+    selected=m.scope(db,user).filter(m.Issuance.id.in_(ids)).with_for_update().all()
+    if len(selected)!=len(ids):raise HTTPException(404,'Selección fuera de tu ámbito comercial')
+    batches={e.test_batch for e in selected}
+    if len(batches)!=1:raise HTTPException(422,'No mezcles emisiones reales y de prueba en un voucher')
+    test_batch=next(iter(batches))
+    if test_batch:
+        from ..services.medical_testing import batch
+        if test_batch!=batch(db):raise HTTPException(409,'Este lote de prueba ya está cerrado')
+    payload.test_batch=test_batch;payload.deposit_submission=True
     entries=m.liquidation_candidates(db,user,payload,lock=True)
-    afocat=m.afocat_emissions(db,entries,'seller')
-    expected=sum((m.liquidation_amounts(e,'seller',afocat)[1] for e in entries),Decimal(0))
+    expected=sum((m.liquidation_amounts(e,'seller')[1] for e in entries),Decimal(0))
     if expected!=amount:raise HTTPException(422,f'El voucher debe coincidir con S/ {expected:.2f}')
     from ..schemas.medical import LiquidationInput
     payload=LiquidationInput(kind='seller',responsible_id=responsible_id,starts_on=min(e.sale_date for e in entries),ends_on=max(e.sale_date for e in entries),issuance_ids=ids)
     row=m.build_liquidation(db,user,payload,entries)
+    if test_batch:row.code='PRUEBA-'+row.code
     # OCR is supporting evidence, never bank verification. Office confirms authenticity.
     row.notes=note.strip() or 'Emisiones y monto revisados por el responsable.'
     evidence=('Lectura OCR adjunta; pendiente de verificación bancaria.\n'+ocr_text[:700]) if ocr_text.strip() else 'Lectura manual confirmada; pendiente de verificación bancaria.'
@@ -58,7 +73,7 @@ async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_
     target=m.STORAGE/db.get(m.Voucher,voucher['id']).storage_key
     try:
         row.status='submitted'
-        dispatch=m.Dispatch(liquidation_id=row.id,kind=KIND,channel='email',recipient=recipient,status='queued',created_by=user.id)
+        dispatch=m.Dispatch(liquidation_id=row.id,kind=KIND,channel='email',recipient=recipient,status='simulated' if test_batch else 'queued',created_by=user.id)
         db.add(dispatch)
         m.save(db,request,user,row)
     except Exception:
@@ -109,7 +124,7 @@ def statements(search:str=Query('',max_length=180),offset:int=Query(0,ge=0),limi
     E,L,V=m.Issuance,m.Liquidation,m.Voucher
     used=exists().where(m.Item.issuance_id==E.id,m.Item.active_key.like('seller:%'))
     available=(~used)&E.payment_status.in_(['collected_by_seller','paid_to_abissol','settled'])
-    deposit=case((E.payment_status!='collected_by_seller',0),(m.Source.kind=='afocat',E.provider_cost),else_=case((E.paid_amount>0,E.paid_amount),else_=E.price))
+    deposit=case((E.payment_status!='collected_by_seller',0),else_=E.price)
     sales={row.responsible_id:dict(row._mapping) for row in db.query(E.responsible_id,
         func.sum(E.price).label('sales'),func.sum(case((E.payment_status=='pending',E.price),else_=0)).label('uncollected'),
         func.sum(case((available,deposit),else_=0)).label('unliquidated_deposit'),
@@ -117,7 +132,7 @@ def statements(search:str=Query('',max_length=180),offset:int=Query(0,ge=0),limi
         .join(m.Source,m.Source.id==E.source_id).filter(E.test_batch.is_(None),E.responsible_id.in_(ids),E.status=='issued').group_by(E.responsible_id)}
     grouped=db.query(V.liquidation_id,*r.aggregate()).join(L,L.id==V.liquidation_id).filter(L.responsible_id.in_(ids),L.kind=='seller',L.legacy_id.is_(None),V.active.is_(True)).group_by(V.liquidation_id).subquery()
     z=lambda name:func.coalesce(getattr(grouped.c,name),0)
-    native=(L.legacy_id.is_(None))&(L.status!='cancelled')
+    native=(L.legacy_id.is_(None))&(L.status!='cancelled')&(~L.code.like('PRUEBA-%'))
     due=L.deposit_required-z('deposit_verified')-z('commission_offset_verified')
     commission=L.commission_total-z('commission_payment_verified')-z('commission_offset_verified')
     fields=[func.sum(case((native,expr),else_=0)).label(name) for name,expr in [

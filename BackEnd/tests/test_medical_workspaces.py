@@ -61,7 +61,7 @@ class WorkspaceTests(unittest.TestCase):
             db.get(MedicalSource,self.source_id).kind="afocat"
             db.commit()
         preview=self.post("/liquidations/preview",self.period(emission))
-        self.assertEqual(preview["deposit_total"],"12.00")
+        self.assertEqual(preview["deposit_total"],"55.00")
         pending=self.issuance(document_number="87654321",payment_status="pending")
         self.assertEqual(self.post("/liquidations/preview",self.period(pending))["total"],1)
         self.assertEqual(self.post("/liquidations/preview",self.period(pending,"meta"))["total"],2)

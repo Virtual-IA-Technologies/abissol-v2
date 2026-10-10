@@ -418,9 +418,10 @@ def liquidation_candidates(db, user, payload, lock=False):
         raise HTTPException(403, "Tu perfil no puede preparar esta liquidación")
     if payload.kind == "seller":
         find(profiles_scope(db, user).filter(Profile.kind == "responsible"), payload.responsible_id)
-    eligible = scope(db, user).filter(Issuance.test_batch.is_(None), Issuance.status == "issued", Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
+    eligible = scope(db, user).filter(Issuance.test_batch==getattr(payload,'test_batch',None), Issuance.status == "issued", Issuance.sale_date >= payload.starts_on, Issuance.sale_date <= payload.ends_on)
     if payload.kind == "seller":
-        eligible = eligible.filter(Issuance.responsible_id == payload.responsible_id, Issuance.payment_status.in_(["collected_by_seller", "paid_to_abissol", "settled"]))
+        states=['pending','collected_by_seller'] if getattr(payload,'deposit_submission',False) else ['collected_by_seller','paid_to_abissol','settled']
+        eligible = eligible.filter(Issuance.responsible_id == payload.responsible_id, Issuance.payment_status.in_(states))
     used = db.query(Item.issuance_id).filter(Item.active_key.like(payload.kind + ":%"))
     eligible = eligible.filter(~Issuance.id.in_(used.scalar_subquery()))
     if payload.issuance_ids is not None:
@@ -434,19 +435,11 @@ def liquidation_candidates(db, user, payload, lock=False):
     return rows
 
 
-def afocat_emissions(db, emissions, kind):
-    if kind != "seller":
-        return set()
-    ids = {e.id for e in emissions}
-    return {ident for ident, in db.query(Issuance.id).join(Profile, Profile.id == Issuance.responsible_id).join(Source, Source.id == Issuance.source_id).filter(Issuance.id.in_(ids), Profile.kind == "responsible", Source.kind == "afocat")}
-
-
-def liquidation_amounts(emission, kind, afocat_ids):
+def liquidation_amounts(emission, kind):
     commission = emission.seller_commission if kind == "seller" else emission.meta_commission if kind == "meta" else emission.platform_fee
     deposit = commission if kind != "seller" else Decimal(0)
-    if kind == "seller" and emission.payment_status == "collected_by_seller":
-        afocat_managed = emission.id in afocat_ids
-        deposit = emission.provider_cost if afocat_managed else (emission.paid_amount or emission.price)
+    if kind == "seller" and emission.payment_status in {"pending","collected_by_seller"}:
+        deposit = emission.price
     return commission, deposit
 
 
@@ -476,9 +469,8 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
 def preview_liquidation(payload: LiquidationInput, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
     rows = liquidation_candidates(db, user, payload)
     items = []
-    afocat_ids = afocat_emissions(db, rows, payload.kind)
     for e in rows:
-        commission, deposit = liquidation_amounts(e, payload.kind, afocat_ids)
+        commission, deposit = liquidation_amounts(e, payload.kind)
         items.append({**dump(e), "commission": str(commission), "deposit": str(deposit)})
     return {"items": items, "total": len(items), "sale_total": str(sum((e.price for e in rows), Decimal(0))),
             "deposit_total": str(sum((Decimal(i["deposit"]) for i in items), Decimal(0)))}
@@ -499,9 +491,8 @@ def build_liquidation(db, user, payload, eligible=None):
     db.flush()
     prefix = {"seller": "LQ", "meta": "LM", "platform": "LP"}[payload.kind]
     row.code = f"{prefix}-{payload.starts_on:%Y%m%d}-{payload.ends_on:%Y%m%d}-{row.id:06d}"
-    afocat_ids = afocat_emissions(db, eligible, payload.kind)
     for emission in eligible:
-        commission, deposit = liquidation_amounts(emission, payload.kind, afocat_ids)
+        commission, deposit = liquidation_amounts(emission, payload.kind)
         db.add(Item(liquidation_id=row.id, issuance_id=emission.id, active_key=f"{payload.kind}:{emission.id}", sale=emission.price, commission=commission, deposit=deposit))
         row.sales_total += emission.price
         row.commission_total += commission
