@@ -1,5 +1,12 @@
 # Estado actual
 
+## Liquidaciones y vouchers históricos — 10/10/2026
+
+Nueva liquidación vuelve a abrir los pendientes en panel lateral. Vouchers históricos
+con vista previa y estado de presentación separado de aprobación. Verificados cuatro
+originales existentes y cinco emisiones sin voucher; sin alterar estados financieros.
+Detalle: [vouchers históricos](../03-MODULOS/VOUCHERS_HISTORICOS.md).
+
 ## Alcance comercial y vistas compactas — 10/10/2026
 
 Filtros agrupados y encabezados simplificados en Emisiones, Liquidaciones y Facturación.
