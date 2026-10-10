@@ -33,6 +33,15 @@ def persist_config(row, data):
     row.payload_encrypted = encrypt_secret(json.dumps(data, ensure_ascii=False))
 
 
+def validate_series_ownership(raw, series, counter):
+    """A legacy series requires a recorded handover after its writer was disabled."""
+    transfer = raw.get('transferred_series', {}).get(series)
+    if series in {s.get('series') for s in raw.get('series', [])} and not transfer:
+        raise sunat.FiscalError('La serie sigue reservada al sistema anterior.')
+    if transfer and int(counter) < int(transfer['last_number']):
+        raise sunat.FiscalError('El correlativo no puede retroceder al transferido del sistema anterior.')
+
+
 def certificate_bytes(db, config):
     file = db.get(LegacyFile, config.get('certificate_path_file_id')) if config.get('certificate_path_file_id') else None
     root = STORAGE / 'legacy_abissol'
@@ -56,11 +65,12 @@ def validate_configuration(db, raw):
     series = raw.get('v2_series', '')
     if not re.fullmatch(r'B[A-Z0-9]{3}',series):
         raise sunat.FiscalError('La serie exclusiva V2 debe tener B y tres caracteres alfanuméricos.')
-    if series in {s.get('series') for s in raw.get('series', [])}:
-        raise sunat.FiscalError('La serie sigue reservada al sistema anterior. Utiliza una exclusiva de V2.')
+    validate_series_ownership(raw, series, raw.get('v2_counter', 0))
     invoice_series=raw.get('v2_invoice_series','')
-    if invoice_series and (not re.fullmatch(r'F[A-Z0-9]{3}',invoice_series) or invoice_series in {s.get('series') for s in raw.get('series',[])}):
+    if invoice_series and not re.fullmatch(r'F[A-Z0-9]{3}',invoice_series):
         raise sunat.FiscalError('La serie de factura debe ser exclusiva V2: F y tres caracteres alfanuméricos.')
+    if invoice_series:
+        validate_series_ownership(raw, invoice_series, raw.get('v2_invoice_counter', 0))
     key, cert = sunat.read_certificate(certificate_bytes(db, raw),raw.get('certificate_password'))
     if raw['environment'] == 'production' and raw['ruc'] not in cert.subject.rfc4514_string():
         raise sunat.FiscalError('El RUC configurado no aparece en el titular del certificado.')
@@ -113,9 +123,11 @@ def enqueue_boleta(db, emission):
     series=raw.get(series_key,'')
     if counter > 99999999 or not re.fullmatch(r'F[A-Z0-9]{3}' if is_invoice else r'B[A-Z0-9]{3}',series):
         raise HTTPException(422,'Revisar serie y correlativo fiscal antes de emitir.')
-    if series in {s.get('series') for s in raw.get('series',[])}:
-        raise HTTPException(422,'La serie sigue reservada al sistema anterior.')
-    number = f"{series}-{counter}"
+    try:
+        validate_series_ownership(raw, series, raw.get(counter_key, 0))
+    except sunat.FiscalError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    number = f"{series}-{counter:08d}" if series in raw.get('transferred_series', {}) else f"{series}-{counter}"
     if db.query(MedicalInvoice.id).filter_by(full_number=number).first():
         raise HTTPException(409,'Numeración fiscal ya utilizada; revisar configuración.')
     invoice = MedicalInvoice(issuance_id=emission.id, draft_key=emission.id, document_type='factura' if is_invoice else 'boleta', customer=preference.get('customer_name') or emission.customer,

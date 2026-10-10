@@ -85,6 +85,27 @@ class FiscalFlowTests(unittest.TestCase):
             db.add(MedicalBillingConfiguration(payload_encrypted=encrypt_secret(json.dumps(config()))))
             db.commit()
 
+    def test_transferred_series_continue_and_cannot_rewind(self):
+        self.enable()
+        with self.sessions() as db:
+            row, raw = billing.configuration(db)
+            raw.update(v2_series='B001', v2_counter=22, series=[{'series':'B001','current_number':22}])
+            with self.assertRaises(sunat.FiscalError):
+                billing.validate_series_ownership(raw, 'B001', 22)
+            raw['transferred_series'] = {'B001': {'last_number':22}}
+            billing.persist_config(row, raw)
+            db.commit()
+        emission = self.issuance()
+        with self.sessions() as db:
+            self.assertEqual(db.query(MedicalInvoice).one().full_number, 'B001-00000023')
+            self.assertEqual(db.query(FiscalJob).one().number, 23)
+            billing.enqueue_boleta(db, db.get(MedicalIssuance, emission['id']))
+            self.assertEqual(db.query(FiscalJob).count(), 1)
+            row, raw = billing.configuration(db)
+            with self.assertRaises(sunat.FiscalError):
+                billing.validate_series_ownership(raw, 'B001', 21)
+            self.assertEqual(raw['v2_counter'], 23)
+
     def test_only_programmer_can_read_write_configuration(self):
         self.enable()
         _,headers=self.login('reader')
