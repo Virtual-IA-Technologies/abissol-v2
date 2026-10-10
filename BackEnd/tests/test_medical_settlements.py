@@ -33,6 +33,44 @@ class SettlementTests(unittest.TestCase):
     def verify(self,voucher,status=200,headers=None):return self.post(f'/vouchers/{voucher["id"]}/verify',{'reason':'Verificado contra banco'},status,headers)
     def detail(self):return self.client.get(API+f'/liquidations/{self.liq["id"]}',headers=self.headers).json()
 
+    def test_selected_voucher_submit_email_and_office_close(self):
+        from app.models.medical import MedicalBusinessSetting,MedicalDispatch,MedicalIssuance
+        from app.models.settings import SmtpSetting
+        import json
+        self.prepare();sale=self.issuance()
+        with self.sessions() as db:
+            db.add(MedicalBusinessSetting(id=1,values={'settlement_office_email':'office@example.com','settlement_office_cc':'copy@example.com'}))
+            db.add(SmtpSetting(host='smtp.example.com',from_email='test@example.com',is_active=True));db.commit()
+        pending=self.client.get(API+'/seller-pending',params={'responsible_id':self.profile_id},headers=self.headers)
+        self.assertEqual([i['id'] for i in pending.json()['items']],[sale['id']])
+        data={'responsible_id':self.profile_id,'issuance_ids':json.dumps([sale['id']]),'amount':'54','reference':'OP-NEW-001','paid_on':sale['sale_date'],'bank':'BCP','note':'Deposito del vendedor','ocr_text':'Monto S/ 55.00'}
+        files={'file':('voucher.pdf',b'%PDF-1.7 new voucher','application/pdf')}
+        with patch('app.services.medical_settlement_delivery.send_email') as mail:
+            response=self.client.post(API+'/seller-settlements',data=data,files=files,headers=self.headers)
+            self.assertEqual(response.status_code,422,response.text)
+            with self.sessions() as db:self.assertEqual(db.query(MedicalLiquidation).count(),0)
+            data['amount']='55'
+            response=self.client.post(API+'/seller-settlements',data=data,files=files,headers=self.headers)
+            self.assertEqual(response.status_code,200,response.text)
+            result=response.json();self.assertEqual(result['status'],'submitted');self.assertEqual(result['notification_status'],'sent')
+            self.assertEqual(mail.call_count,1);self.assertEqual(len(mail.call_args.kwargs['attachments']),1)
+            self.assertEqual(mail.call_args.args[1],'office@example.com')
+            self.assertEqual(mail.call_args.kwargs['cc'],'copy@example.com')
+            self.assertIn('Deposito del vendedor',mail.call_args.args[3])
+            self.assertEqual(self.client.post(API+'/seller-settlements',data=data,files=files,headers=self.headers).status_code,409)
+            self.assertEqual(mail.call_count,1)
+        _,reader=self.login('reader')
+        response=self.client.post(API+f'/liquidations/{result["id"]}/settle',json={'reason':'Verificado en banco'},headers=reader)
+        self.assertEqual(response.status_code,403)
+        self.post(f'/liquidations/{result["id"]}/settle',{'reason':'Verificado en banco'})
+        self.post(f'/liquidations/{result["id"]}/settle',{'reason':'Verificado en banco'},409)
+        with self.sessions() as db:
+            row=db.get(MedicalLiquidation,result['id'])
+            self.assertEqual(row.status,'paid');self.assertIn('Deposito del vendedor',row.notes)
+            self.assertEqual(db.get(MedicalIssuance,sale['id']).payment_status,'settled')
+            self.assertIsNotNone(db.query(MedicalVoucher).one().verified_at)
+            self.assertEqual(db.query(MedicalDispatch).filter_by(kind='settlement_office').count(),1)
+
     def test_partial_deposits_close_and_later_commission(self):
         self.setup_sale();first=self.voucher(20);self.action('submit');self.action('approve');self.action('pay',422)
         self.verify(first);self.verify(first,409)

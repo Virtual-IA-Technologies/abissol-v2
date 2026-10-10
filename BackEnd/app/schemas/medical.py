@@ -126,7 +126,7 @@ class LiquidationInput(Payload):
             raise ValueError("Selecciona al vendedor responsable")
         if self.kind != "seller" and self.responsible_id is not None:
             raise ValueError("META y plataforma son consolidados de todos los vendedores")
-        if self.ends_on < self.starts_on or (self.ends_on - self.starts_on).days > 366:
+        if self.ends_on < self.starts_on or (not self.issuance_ids and (self.ends_on - self.starts_on).days > 366):
             raise ValueError("El período debe estar ordenado y no superar un año")
         return self
 

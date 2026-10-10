@@ -14,16 +14,20 @@ class BusinessSettingsInput(Payload):
     daily_dispatch_time: str = Field(default="08:30", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     evening_dispatch_time: str = Field(default="21:00", pattern=r"^([01]\d|2[0-3]):[0-5]\d$")
     meta_auto_enabled: bool = False
+    settlement_office_email: str = Field(default='', max_length=180)
+    settlement_office_cc: str = Field(default='', max_length=180)
     insured_email_template: str = Field(default="", max_length=5000)
     insured_whatsapp_template: str = Field(default="", max_length=4000)
 
     @model_validator(mode='after')
     def schedule(self):
+        if len(', '.join(filter(None,[self.settlement_office_email,self.settlement_office_cc])))>180:
+            raise ValueError('Los destinatarios de liquidaciones admiten hasta 180 caracteres en total')
         if self.meta_auto_enabled and (not self.metafin_email or self.daily_dispatch_time>=self.evening_dispatch_time):
             raise ValueError('Configura destinatarios META y un segundo corte posterior al primero')
         return self
 
-    @field_validator("metafin_email")
+    @field_validator("metafin_email", "settlement_office_email", "settlement_office_cc")
     @classmethod
     def recipients(cls, value):
         return ", ".join(str(TypeAdapter(EmailStr).validate_python(item.strip())) for item in value.replace(";", ",").split(",") if item.strip())
@@ -31,6 +35,9 @@ class BusinessSettingsInput(Payload):
     @field_validator("insured_email_template", "insured_whatsapp_template")
     @classmethod
     def template(cls, value):
+        import re
+        if re.search(r'[A-Za-z]\?\?[A-Za-z]|\ufffd|\u00c3[\u0080-\u00bf]|\u00c2[\u0080-\u00bf]',value):
+            raise ValueError('La plantilla contiene caracteres dañados. Corrige el texto antes de guardar.')
         for _, key, spec, conversion in Formatter().parse(value):
             if key is not None and (key not in {"nombre", "plan", "certificado", "inicio", "fin", "enlace", "condicionado"} or spec or conversion):
                 raise ValueError("Variable no admitida en la plantilla")

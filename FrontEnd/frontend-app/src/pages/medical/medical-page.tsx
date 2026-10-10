@@ -11,6 +11,8 @@ import { UnderlineTabs } from "@/components/underline-tabs";
 import { BillingConfiguration } from "./billing-configuration";
 import { BusinessWorkspace, type SectionProps } from "./business-workspace";
 import { LiquidationDetail, type SettlementDetail } from "./liquidation-detail";
+import { SellerSettlementForm } from "./seller-settlement-form";
+import { SellerSettlementDetail } from "./seller-settlement-detail";
 import { LiquidationBuilder } from "./business-workspace-panels";
 import { EmissionForm } from "./emission-form";
 import { useAuth } from "@/context/AuthContext";
@@ -33,7 +35,7 @@ const descriptions: Record<string, string> = {
   network: "Participantes comerciales, cuentas de acceso y vínculos con AFOCAT independientes.",
   emissions: "Contrata planes, registra cobros y descarga certificados con verificación QR.",
   dispatches: "Envía la constancia por correo o WhatsApp y consulta el resultado de cada intento.",
-  liquidations: "Prepara períodos, adjunta depósitos y concilia los ingresos de la red comercial.",
+  liquidations: "Selecciona pendientes, adjunta el voucher y envía a Oficina Principal para liquidar.",
   billing: "Boletas automáticas de emisiones, archivos y seguimiento SUNAT.",
   reports: "Ventas, recaudación y comisiones dentro de tu ámbito comercial.",
 };
@@ -164,7 +166,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     network: [["Participante", r => String(r.display_name || userName(r.user_id))], ["Acceso al portal", r => r.user_id ? userName(r.user_id) : "Sin cuenta ABISSOL"], ["Roles de acceso", r => r.user_id ? (lookup.users.find(u => u.id === Number(r.user_id))?.roles || []).join(", ") || "Sin rol activo" : "Sin acceso al portal"], ["ID externo", r => String(r.external_user_id || "—")], ["Función", r => labels[String(r.kind)]], ["Origen", r => String(lookup.sources.find(s => s.id === r.source_id)?.name || r.source_id)], ["Responsable", r => r.manager_id ? profileName(r.manager_id) : "—"], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     emissions: [["Certificado", r => String(r.code)], ["Canal / emisor", r => `${r.external_source ? `Externa · ${r.external_source}` : "Interna · ABISSOL"} · ${profileName(r.emitter_id)}`], ["Titular", r => `${r.customer} · ${r.document_number}`], ["Plan", r => String(r.plan_name)], ["Vigencia", r => `${r.starts_on} → ${r.ends_on}`], ["Importe", r => money(r.price)], ["Estado", r => `${labels[String(r.status)]} · ${labels[String(r.payment_status)]}`]],
     dispatches: [["Emisión", r => String(r.invoice_number || r.issuance_code || r.liquidation_code || (r.liquidation_id ? `Liquidación #${r.liquidation_id}` : "Envío general"))], ["Canal", r => labels[String(r.channel)]], ["Destinatario", r => String(r.recipient)], ["Estado", r => labels[String(r.status)] || String(r.status)], ["Intentos", r => String(r.attempts)], ["Detalle", r => String(r.error || "—")]],
-    liquidations: [["Número", r => String(r.code || `LIQ-${r.id}`)], ["Tipo", r => labels[String(r.kind)]], ["Responsable", r => profileName(r.responsible_id)], ["Período", r => `${r.starts_on} → ${r.ends_on}`], ["Ventas", r => money(r.sales_total)], ["Comisión / proveedor", r => money(r.commission_total)], ["Depósito", r => money(r.deposit_required)], ["Saldo", r => r.legacy_id ? "Histórico" : money(r.balance_due)], ["Comisión pendiente", r => r.legacy_id || r.kind !== "seller" ? "—" : money(r.commission_due)], ["Estado", r => labels[String(r.status)] || String(r.status)]],
+    liquidations: [["Número", r => String(r.code || `LIQ-${r.id}`)], ["Tipo", r => labels[String(r.kind)]], ["Responsable", r => profileName(r.responsible_id)], ["Período", r => `${r.starts_on} → ${r.ends_on}`], ["Ventas", r => money(r.sales_total)], ["Comisión / proveedor", r => money(r.commission_total)], ["Depósito", r => money(r.deposit_required)], ["Saldo", r => r.legacy_id ? "Histórico" : money(r.balance_due)], ["Comisión pendiente", r => r.legacy_id || r.kind !== "seller" ? "—" : money(r.commission_due)], ["Estado", r => r.status==="submitted"||r.status==="sent"?"Enviado":r.status==="paid"?"Liquidado":labels[String(r.status)] || String(r.status)]],
     billing: [["Comprobante", r => String(r.full_number || `BOR-${r.id}`)], ["Tipo", r => labels[String(r.document_type)] || String(r.document_type)], ["Cliente", r => String(r.customer)], ["Documento", r => String(r.document_number)], ["Total", r => money(r.total)], ["Estado fiscal", r => `${r.fiscal_environment === "beta" ? "PRUEBA BETA · " : ""}${labels[String(r.sunat_status)] || String(r.sunat_status)}`], ["Estado", r => r.deleted_at ? "Archivado" : labels[String(r.status)] || String(r.status)]],
     reports: [["Plan", r => String(r.plan)], ["Emisiones", r => String(r.count)], ["Ventas", r => money(r.sales)]],
   };
@@ -199,7 +201,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     }
     if(section==="plans"&&manager)actions.push({label:"Editar",icon:Pencil,onSelect:()=>planForm(r)});
     if(section==="network"&&manager&&lookup.global_access)actions.push({label:"Editar",icon:Pencil,onSelect:()=>profileForm(r)});
-    if(section==="dispatches"&&editor&&!r.legacy_id&&!["meta_daily_report","metafin_monthly","invoice_client"].includes(String(r.kind))&&r.status==="failed")actions.push({label:"Reintentar envío",icon:Send,onSelect:()=>setModal({title:"Reintentar envío",path:`/dispatches/${r.id}/retry`,fields:[],description:"Comprueba antes el proveedor: un nuevo envío puede duplicar el mensaje."})});
+    if(section==="dispatches"&&editor&&!r.legacy_id&&!["meta_daily_report","metafin_monthly","invoice_client","settlement_office"].includes(String(r.kind))&&r.status==="failed")actions.push({label:"Reintentar envío",icon:Send,onSelect:()=>setModal({title:"Reintentar envío",path:`/dispatches/${r.id}/retry`,fields:[],description:"Comprueba antes el proveedor: un nuevo envío puede duplicar el mensaje."})});
     if(section==="liquidations") {
       actions[0]={label:"Detalle y conciliación",icon:Eye,onSelect:()=>void showDetail(r)};
       if(r.kind==="meta"&&r.status!=="cancelled") {
@@ -239,10 +241,11 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     {letterPreview && <Dialog open onOpenChange={open=>{if(!open)setLetterPreview(null);}}><DialogContent className="sm:max-w-5xl"><DialogHeader><DialogTitle>{letterPreview.code}</DialogTitle><DialogDescription>Documento del programa de asistencia.</DialogDescription></DialogHeader><iframe title="Documento del programa" src={letterPreview.url} className="h-[75vh] w-full rounded-lg border" /></DialogContent></Dialog>}
     {delivery && <EmissionDelivery row={{id:Number(delivery.id),code:String(delivery.code),token:String(delivery.token),email:String(delivery.email||""),phone:String(delivery.phone||""),test_batch:delivery.test_batch?String(delivery.test_batch):null}} close={()=>setDelivery(null)}/>}
     {invoiceId !== null && <BillingHistory key={invoiceId} id={invoiceId} close={() => setInvoiceId(null)} download={download} />}
-    {modal?.path === "/liquidations" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(section!=="liquidations"); }} />}
+    {modal?.path === "/liquidations" && (liquidationKind||"seller")!=="seller" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(section!=="liquidations"); }} />}
     {modal?.path === "/emissions" && <EmissionForm plans={lookup.plans.filter(p => p.active)} emitters={profileOptions()} globalAccess={lookup.global_access} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Emisión registrada correctamente."); await load(section!=="liquidations"); }} />}
     {modal && modal.path !== "/emissions" && modal.path !== "/liquidations" && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(["failed", "uncertain"].includes(String(result.status)) ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(section!=="liquidations"); }} />}
-    {detail&&<LiquidationDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} editor={editor} manager={manager&&lookup.global_access}/>}
+    {modal?.path === "/liquidations" && (liquidationKind||"seller")==="seller" && <SellerSettlementForm profiles={profileOptions("responsible")} close={()=>setModal(null)} saved={async()=>{setModal(null);await load(false);}}/>}
+    {detail&&detail.kind==="seller"&&!detail.legacy_id&&["submitted","approved","paid"].includes(detail.status)?<SellerSettlementDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} manager={manager&&lookup.global_access}/>:detail&&<LiquidationDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} editor={editor} manager={manager&&lookup.global_access}/>}
     </>}
     </UnderlineTabs>
   </section>;

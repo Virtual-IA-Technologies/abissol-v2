@@ -1,5 +1,5 @@
 """Read-only seller statements and explicit administrative bank verification."""
-from fastapi import APIRouter,Depends,Query,HTTPException,Request
+from fastapi import APIRouter,Depends,Query,HTTPException,Request,Form,File,UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import func,case,exists
 from sqlalchemy.orm import Session
@@ -12,6 +12,76 @@ from ..utils.time import utc_now
 from . import medical as m
 
 router=APIRouter(prefix='/medical')
+
+@router.get('/seller-pending')
+def pending(responsible_id:int,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','editor'))):
+    from types import SimpleNamespace
+    from datetime import date
+    payload=SimpleNamespace(kind='seller',responsible_id=responsible_id,starts_on=date(1900,1,1),ends_on=date(2100,1,1),issuance_ids=None)
+    result=m.preview_liquidation(payload,db,user)
+    result['items']=[i for i in result['items'] if Decimal(i['deposit'])>0]
+    return {'items':result['items']}
+
+@router.post('/seller-settlements')
+async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_ids:str=Form(...),
+    amount:Decimal=Form(...,gt=0,max_digits=12,decimal_places=2),reference:str=Form(...,min_length=3,max_length=100),
+    paid_on:m.date=Form(...),bank:str=Form(...,min_length=2,max_length=80),account:str=Form('',max_length=34),
+    note:str=Form('',max_length=1000),ocr_text:str=Form('',max_length=20000),file:UploadFile=File(...),
+    db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','editor'))):
+    import json
+    from types import SimpleNamespace
+    from datetime import date
+    from ..services.medical_settings import business_settings
+    from ..services.email import get_smtp_setting,EmailNotConfigured
+    from ..services.medical_settlement_delivery import KIND,deliver
+    try:
+        ids=json.loads(issuance_ids)
+        if not isinstance(ids,list) or not 1<=len(ids)<=1000 or any(type(i)!=int or i<=0 for i in ids) or len(ids)!=len(set(ids)):raise ValueError()
+    except (ValueError,TypeError):raise HTTPException(422,'Selecciona las emisiones pendientes')
+    settings=business_settings(db)
+    if not settings['settlement_office_email']:raise HTTPException(422,'Configura el correo de Oficina Principal')
+    recipient=', '.join(dict.fromkeys(i.strip().lower() for value in [settings['settlement_office_email'],settings['settlement_office_cc']] for i in value.split(',') if i.strip()))
+    try:get_smtp_setting(db)
+    except EmailNotConfigured:raise HTTPException(422,'Configura el correo SMTP antes de enviar')
+    payload=SimpleNamespace(kind='seller',responsible_id=responsible_id,starts_on=date(1900,1,1),ends_on=date(2100,1,1),issuance_ids=ids)
+    entries=m.liquidation_candidates(db,user,payload,lock=True)
+    afocat=m.afocat_emissions(db,entries,'seller')
+    expected=sum((m.liquidation_amounts(e,'seller',afocat)[1] for e in entries),Decimal(0))
+    if expected!=amount:raise HTTPException(422,f'El voucher debe coincidir con S/ {expected:.2f}')
+    from ..schemas.medical import LiquidationInput
+    payload=LiquidationInput(kind='seller',responsible_id=responsible_id,starts_on=min(e.sale_date for e in entries),ends_on=max(e.sale_date for e in entries),issuance_ids=ids)
+    row=m.build_liquidation(db,user,payload,entries)
+    # OCR is supporting evidence, never bank verification. Office confirms authenticity.
+    row.notes=note.strip() or 'Emisiones y monto revisados por el responsable.'
+    evidence=('Lectura OCR adjunta; pendiente de verificación bancaria.\n'+ocr_text[:700]) if ocr_text.strip() else 'Lectura manual confirmada; pendiente de verificación bancaria.'
+    voucher=await r.register(db,request,user,row,reference,amount,paid_on,file,bank,account,'deposit',evidence,commit=False,require_account=False)
+    target=m.STORAGE/db.get(m.Voucher,voucher['id']).storage_key
+    try:
+        row.status='submitted'
+        dispatch=m.Dispatch(liquidation_id=row.id,kind=KIND,channel='email',recipient=recipient,status='queued',created_by=user.id)
+        db.add(dispatch)
+        m.save(db,request,user,row)
+    except Exception:
+        target.unlink(missing_ok=True);raise
+    deliver(db,dispatch.id)
+    return {'id':row.id,'code':row.code,'status':row.status,'notification_status':dispatch.status}
+
+@router.post('/liquidations/{ident}/settle')
+def settle(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):
+    m.global_only(user)
+    row=m.find(m.liquidation_scope(db,user),ident,True);r.require_current(row)
+    if row.kind!='seller' or row.status not in {'submitted','approved'}:raise HTTPException(409,'La liquidación no está enviada para revisión')
+    vouchers=db.query(m.Voucher).filter_by(liquidation_id=ident,active=True).with_for_update().all()
+    deposits=sum((v.amount for v in vouchers if v.purpose in {'deposit','commission_offset'}),Decimal(0))
+    if deposits!=row.deposit_required or not vouchers:raise HTTPException(422,'El voucher no coincide con las emisiones seleccionadas')
+    before=m.dump(row)
+    for v in vouchers:
+        if not v.verified_at:v.verified_at=utc_now();v.verified_by=user.id
+    row.status='paid'
+    row.notes=(row.notes+'\nOficina Principal: '+payload.reason).strip()
+    ids=db.query(m.Item.issuance_id).filter_by(liquidation_id=ident)
+    db.query(m.Issuance).filter(m.Issuance.id.in_(ids.scalar_subquery())).update({'payment_status':'settled'},synchronize_session=False)
+    return m.save(db,request,user,row,before)
 
 @router.post('/vouchers/{ident}/verify')
 def verify(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):

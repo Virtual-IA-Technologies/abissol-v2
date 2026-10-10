@@ -26,12 +26,14 @@ def send_email(
     text: str,
     html: str | None = None,
     attachments: list[tuple[str, bytes, str]] | None = None,
+    cc: str | None = None,
 ) -> None:
     setting = get_smtp_setting(db)
     message = EmailMessage()
     message["Subject"] = subject
     message["From"] = formataddr((setting.from_name, setting.from_email))
     message["To"] = recipient
+    if cc: message['Cc'] = cc
     message.set_content(text)
     if html:
         message.add_alternative(html, subtype="html")

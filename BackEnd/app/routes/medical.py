@@ -94,7 +94,7 @@ def find(query, ident, lock=False):
     return row
 
 
-def save(db, request, user, row, before=None):
+def save(db, request, user, row, before=None, *, commit=True):
     try:
         db.add(row)
         db.flush()
@@ -107,7 +107,7 @@ def save(db, request, user, row, before=None):
             entries=db.query(Issuance).join(Item,Item.issuance_id==Issuance.id).filter(Item.liquidation_id==row.id).order_by(Issuance.id).all()
             if entries:archive.monthly(db,row,entries,user.id)
         audit_change(db, request, user, row.__tablename__, row.id, before=before, after=dump(row), module="abissol_medical")
-        db.commit()
+        if commit: db.commit()
     except IntegrityError as exc:
         db.rollback()
         raise HTTPException(409, "El código, referencia o registro ya existe; actualiza la lista") from exc
@@ -486,7 +486,12 @@ def preview_liquidation(payload: LiquidationInput, db: Session = Depends(get_db)
 
 @router.post("/liquidations")
 def create_liquidation(payload: LiquidationInput, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations", "editor"))):
-    eligible = liquidation_candidates(db, user, payload, lock=True)
+    row = build_liquidation(db, user, payload)
+    return save(db, request, user, row)
+
+
+def build_liquidation(db, user, payload, eligible=None):
+    if eligible is None: eligible = liquidation_candidates(db, user, payload, lock=True)
     if not eligible:
         raise HTTPException(422, "No hay emisiones disponibles en este período")
     row = Liquidation(**payload.model_dump(exclude={"issuance_ids"}), created_by=user.id, sales_total=0, commission_total=0, deposit_required=0)
@@ -501,7 +506,7 @@ def create_liquidation(payload: LiquidationInput, request: Request, db: Session 
         row.sales_total += emission.price
         row.commission_total += commission
         row.deposit_required += deposit
-    return save(db, request, user, row)
+    return row
 
 
 @router.get("/liquidations/{ident}")
@@ -516,6 +521,8 @@ def liquidation_detail(ident: int, db: Session = Depends(get_db), user=Depends(r
         values[key]=values.get(key,Decimal(0))+Decimal(voucher['amount'])
     result.update(reconciliation.balance(row,values))
     result['voucher_total']=result['deposit_registered']
+    notification=db.query(Dispatch).filter_by(liquidation_id=ident,kind='settlement_office').order_by(Dispatch.id.desc()).first()
+    result['office_notification']=notification.status if notification else None
     return result
 
 
@@ -530,6 +537,8 @@ def void_voucher(ident: int, payload: ReasonInput, request: Request, db: Session
     row = find(db.query(Voucher).filter_by(active=True), ident)
     liquidation = find(liquidation_scope(db, user), row.liquidation_id, True)
     reconciliation.require_current(liquidation)
+    if liquidation.kind=='seller' and liquidation.status in {'submitted','approved'} and not admin(user):
+        raise HTTPException(409,'Enviado a Oficina Principal: espera su revisión antes de retirar el voucher')
     db.refresh(row)
     if not row.active:raise HTTPException(409,'El movimiento ya fue retirado')
     if row.verified_at or row.purpose!='deposit':
@@ -776,7 +785,7 @@ def create_dispatch(payload: DispatchInput, request: Request, db: Session = Depe
 @router.post("/dispatches/{ident}/retry")
 def retry_dispatch(ident: int, request: Request, db: Session = Depends(get_db), user=Depends(require_access("medical-dispatches", "editor"))):
     row = find(db.query(Dispatch).filter(Dispatch.issuance_id.in_(scope(db, user).with_entities(Issuance.id).scalar_subquery())), ident, True)
-    if row.kind in {"meta_daily_report", "metafin_monthly", "invoice_client"}:
+    if row.kind in {"meta_daily_report", "metafin_monthly", "invoice_client", "settlement_office"}:
         raise HTTPException(409, "Los reportes META se reenvían desde su pestaña con confirmación explícita")
     if row.legacy_id:
         raise HTTPException(409, 'Comunicación histórica: no se reenvía desde la migración')
