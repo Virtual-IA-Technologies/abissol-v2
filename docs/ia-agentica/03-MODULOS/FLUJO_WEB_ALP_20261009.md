@@ -42,3 +42,20 @@ Respaldo privado: `/root/abissol-cutover-20261009/`. Para revertir el destino AL
 retirar su override privado `/home/alp/.abissol-v2-config.php`; los cambios de
 adaptador son condicionales. Para revertir la web, restaurar `site/index.before.php`
 con propietario abissol. No revertir datos ni correlativos automáticamente.
+
+## Acciones y limpieza de pruebas
+
+Emisiones utiliza el menú compartido vertical con iconos; clic derecho ofrece
+las mismas acciones autorizadas. Doble clic o Enter abre la carta dentro de un
+visor, sin ejecutar cobros, anulaciones ni envíos. El aviso enlaza ahora al
+portal habitual ALP y explica la excepción de destinatarios de prueba.
+
+Por autorización expresa se retiraron exclusivamente las emisiones de prueba
+32 y 33, sus dos comprobantes, diez documentos con versiones y envíos asociados.
+Respaldo privado SQL/archivos/inventario en `backups/remove-two-tests-20261009`.
+Sin liquidaciones ni trabajos fiscales relacionados; numeradores conservados.
+Lote de pruebas y bloqueo SUNAT permanecen activos. Los mensajes ya aceptados
+por proveedores externos no se pueden retirar desde esta limpieza.
+
+Después de limpiar, el adaptador normal ALP consultó correctamente sus cuatro
+emisiones restantes y validó una emisión con rollback sin crear CAT ni venta.
