@@ -1,5 +1,9 @@
 # ABISSOL V2
 
+## Modo de trabajo obligatorio
+
+Antes de trabajar, leer y aplicar [MODO_DE_TRABAJO.md](docs/ia-agentica/06-GUIAS/MODO_DE_TRABAJO.md). Sus 15 reglas de máxima eficiencia y mínimo consumo de tokens son obligatorias en todas las tareas y conversaciones futuras de este proyecto, salvo instrucción expresa posterior del usuario. Reutilizar contexto, hacer cambios mínimos y validar proporcionalmente, manteniendo seguridad, integridad de datos y las obligaciones específicas del proyecto. El documento no autoriza por sí mismo publicaciones ni acciones destructivas.
+
 Los selectores de formularios deben permitir búsqueda al escribir (tipo Select2).
 Usar SearchableSelect/SearchableMultiSelect compartidos y conservar la validación
 de campos obligatorios, valores enviados y permisos del backend.

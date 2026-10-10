@@ -11,3 +11,5 @@
 Solo MANUAL_DE_USO.md es documentación general. Estado y bitácora son internos;
 arquitectura y guía son técnicos. El inicializador sincroniza estos documentos
 en la biblioteca propia de ABISSOL; no modifica bibliotecas de otros proyectos.
+
+- [Modo de trabajo obligatorio: máxima eficiencia y mínimo consumo](06-GUIAS/MODO_DE_TRABAJO.md).

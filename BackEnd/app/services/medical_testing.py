@@ -10,6 +10,16 @@ from . import medical_billing as fiscal
 def batch(db,lock=False):
     return fiscal.configuration(db,lock=lock)[1].get('test_batch') or None
 
+
+def check_delivery(db, emission, channel, recipient, real_test=False):
+    if not emission.test_batch or not real_test:return
+    import re
+    raw=fiscal.configuration(db)[1]
+    normalize=(lambda value: str(value).strip().lower()) if channel=='email' else (lambda value: re.sub(r'\D','',str(value)))
+    allowed=raw.get('test_delivery_emails' if channel=='email' else 'test_delivery_phones',[])
+    if not raw.get('test_batch') or normalize(recipient) not in {normalize(v) for v in allowed}:
+        raise HTTPException(403,'Destinatario no autorizado para recepción real de pruebas. El envío fiscal permanece bloqueado.')
+
 def activate(db,enabled):
     row,raw=fiscal.configuration(db,lock=True)
     if not row:raise HTTPException(422,'Falta la configuración fiscal')

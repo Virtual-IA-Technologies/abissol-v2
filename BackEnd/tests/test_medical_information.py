@@ -33,7 +33,7 @@ class InformationTests(unittest.TestCase):
         public=self.client.get(API+path+'/letter');self.assertEqual(private.content,public.content)
         with pymupdf.open(stream=public.content,filetype='pdf') as pdf:
             text=''.join(p.get_text() for p in pdf)
-            self.assertIn('CARTA DE BIENVENIDA',text.upper());self.assertIn('META ASSISTANCE',text);self.assertIn(sale['token'],text.replace('\n',''))
+            self.assertIn('CARTA DE BIENVENIDA',text.upper());self.assertIn('META ASSISTANCE',text);self.assertIn('https://abissol.org/?consulta=',text.replace('\n',''))
         with patch('app.routes.medical.send_email') as send:
             result=self.post('/dispatches',{'issuance_id':sale['id'],'channel':'email'})
             self.assertEqual(result['status'],'sent')

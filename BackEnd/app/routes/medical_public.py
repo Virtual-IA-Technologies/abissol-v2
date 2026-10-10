@@ -2,15 +2,47 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from html import escape
 import re
-from fastapi import APIRouter,Depends,HTTPException
-from fastapi.responses import FileResponse,HTMLResponse,RedirectResponse
+from fastapi import APIRouter,Depends,HTTPException,Query
+from fastapi.responses import FileResponse,HTMLResponse,RedirectResponse,JSONResponse
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..models.medical import MedicalIssuance
 from ..services.medical_information import letter_file,conditions_file
 
 router=APIRouter(prefix='/medical/validate')
+search_router=APIRouter(prefix='/medical/public')
 HEADERS={'Cache-Control':'no-store','X-Robots-Tag':'noindex, nofollow','Referrer-Policy':'no-referrer','X-Content-Type-Options':'nosniff'}
+
+
+@search_router.get('/search')
+def search(q:str=Query('',max_length=100),code:str=Query('',max_length=100),dni:str=Query('',max_length=20),db:Session=Depends(get_db)):
+    from sqlalchemy import or_
+    from ..services.medical_public_links import verification_url,document_url
+    from ..models.medical import MedicalPlan
+    from ..models.documents import DocumentBinding
+    value=(code or dni or q).strip()
+    if not re.fullmatch(r'[A-Za-z0-9_-]{6,100}',value):
+        return JSONResponse({'message':'Ingrese un código o documento válido.','data':[]},status_code=422,headers=HEADERS)
+    query=db.query(MedicalIssuance)
+    if value.isdigit():query=query.filter(MedicalIssuance.document_number==value)
+    else:query=query.filter(or_(MedicalIssuance.token==value,MedicalIssuance.code==value))
+    rows=query.order_by(MedicalIssuance.id.desc()).limit(10).all()
+    if not rows:return JSONResponse({'message':'No se encontró un programa para la consulta.','data':[]},status_code=404,headers=HEADERS)
+    plans={p.id:p for p in db.query(MedicalPlan).filter(MedicalPlan.id.in_({r.plan_id for r in rows}))}
+    conditioned_plans={p[0] for p in db.query(DocumentBinding.source_id).filter(DocumentBinding.source_type=='plan',DocumentBinding.artifact_key=='conditions',DocumentBinding.source_id.in_(plans))}
+    today=datetime.now(ZoneInfo('America/Lima')).date()
+    items=[]
+    for row in rows:
+        state='test' if row.test_batch else 'cancelled' if row.status=='cancelled' else 'future' if row.starts_on>today else 'expired' if row.ends_on<today else 'valid'
+        label={'test':'PRUEBA — No acredita cobertura real','cancelled':'Programa anulado','future':'Vigencia por iniciar','expired':'Programa no vigente','valid':'Programa vigente'}[state]
+        plan=plans.get(row.plan_id)
+        conditions=row.conditions_url or (plan.conditions_url if plan else '')
+        items.append({'exists':True,'valid':state=='valid','is_test':bool(row.test_batch),'status':row.status,'status_public':state,'status_label':label,'message':label,
+            'code':row.code,'document_number':row.document_number[:2]+'****'+row.document_number[-2:],
+            'insured_name':row.customer,'plan':row.plan_name,'starts_at':str(row.starts_on),'ends_at':str(row.ends_on),
+            'public_verification_url':verification_url(row),'welcome_letter_url':document_url(row,'letter') if row.status=='issued' else '',
+            'conditioned_url':document_url(row,'conditions') if (conditions or row.plan_id in conditioned_plans) and row.status=='issued' else ''})
+    return JSONResponse({'data':items},headers=HEADERS)
 
 @router.get('/assets/{name}')
 def branding_asset(name:str):

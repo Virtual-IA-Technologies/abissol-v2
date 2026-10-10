@@ -118,7 +118,8 @@ def emission(db,row,actor=None):
         archive(db,**kwargs,file_path=legacy_path(file),expected_hash=file.sha256)
     else:
         # Stable production verification URL; no user-supplied hosts or public storage URLs.
-        archive(db,**kwargs,content=m.letter_pdf(row,'https://v2.abissol.org/abissol/api/v1/medical/validate/'+row.token))
+        from .medical_public_links import verification_url
+        archive(db,**kwargs,content=m.letter_pdf(row,verification_url(row)))
 
 
 def invoice(db,row,actor=None):

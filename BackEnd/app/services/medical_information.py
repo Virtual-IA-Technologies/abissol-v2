@@ -31,7 +31,8 @@ def conditions_file(db,row):
 def welcome_message(db,row,url,*,condition_available=False):
     """Escaped canonical HTML; custom text remains a supported explicit configuration."""
     from .medical_settings import business_settings,insured_message
-    letter_url=url+'/letter';condition_url=url+'/conditions' if condition_available else row.conditions_url
+    from .medical_public_links import document_url
+    letter_url=document_url(row,'letter');condition_url=document_url(row,'conditions') if condition_available else row.conditions_url
     context={key:escape(str(value or '')) for key,value in {'safeName':row.customer,'safePlan':row.plan_name,'startsAt':row.starts_on.strftime('%d/%m/%Y'),'endsAt':row.ends_on.strftime('%d/%m/%Y')}.items()}
     def button(url,label,background,color):
         return f'<a href="{escape(url,quote=True)}" target="_blank" style="display:inline-block;padding:12px 17px;border-radius:10px;background:{background};color:{color};text-decoration:none;font-weight:700;margin:0 8px 8px 0;">{label}</a>' if url.startswith('https://') else ''

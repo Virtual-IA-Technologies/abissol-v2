@@ -25,6 +25,14 @@ function alp_abissol_v2_response($url, array $decoded)
     if (!isset($decoded['message']) && isset($decoded['detail'])) {
         $decoded['message'] = is_string($decoded['detail']) ? $decoded['detail'] : 'Revise los datos obligatorios de la solicitud.';
     }
+    if (substr($url, -7) === '/resend' && isset($decoded['data']) && is_array($decoded['data'])) {
+        $messages = [];
+        foreach ($decoded['data'] as $attempt) {
+            $messages[] = (($attempt['channel'] ?? '') === 'email' ? 'Correo' : 'WhatsApp') . ': ' .
+                (($attempt['status'] ?? '') === 'sent' ? 'aceptado por el proveedor' : (($attempt['status'] ?? '') === 'simulated' ? 'simulado, sin envío real' : 'sin confirmación; revise antes de reenviar'));
+        }
+        $decoded['message'] = implode('. ', $messages);
+    }
     $map = static function (array $row) {
         if (!empty($row['welcome_letter_api_url'])) {
             $row['welcome_letter_url'] = '/abissol/archivo_v2.php?emission='.(int)$row['id'].'&kind=letter';

@@ -302,6 +302,7 @@ class ExternalDispatch(Payload):
     recipient_email: EmailStr | None = None
     recipient_phone: str | None = Field(default=None,min_length=6,max_length=25,pattern=r'^[+0-9 ()-]+$')
     force: bool = False
+    real_test: bool = False
 
 
 @router.post('/emissions/{ident}/resend')
@@ -316,6 +317,8 @@ def send_information(ident:int,payload:ExternalDispatch,request:Request,db:Sessi
     if payload.whatsapp:channels.append(('whatsapp',payload.recipient_phone or row.phone))
     if not channels or any(not recipient for _,recipient in channels):
         raise HTTPException(422,'Selecciona un canal con destinatario válido')
+    from ..services.medical_testing import check_delivery
+    for channel,recipient in channels:check_delivery(db,row,channel,recipient,payload.real_test)
     attempts=[]
     for channel,recipient in channels:
         previous=db.query(m.Dispatch).filter_by(issuance_id=row.id,channel=channel,recipient=recipient).filter(
@@ -328,7 +331,7 @@ def send_information(ident:int,payload:ExternalDispatch,request:Request,db:Sessi
         db.add(attempt);attempts.append(attempt)
     m.audit_change(db,request,actor,'medical_external_dispatch',row.id,after={'channels':[c for c,_ in channels],'source':source.external_key},module='abissol_medical')
     db.commit()  # Reserve all selected channels before contacting any provider.
-    return {'data':[m.deliver(db,request,actor,attempt,row) for attempt in attempts]}
+    return {'data':[m.deliver(db,request,actor,attempt,row,real_test=payload.real_test) for attempt in attempts]}
 
 
 def scoped_invoice(db,source,ident):

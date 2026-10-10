@@ -267,3 +267,8 @@ Repositorio vigente: `Virtual-IA-Technologies/abissol-v2`, solicitado por el usu
 - 13 pruebas backend aprobadas: 8 de plataforma y 5 de main. Lint sin errores y 6 advertencias preexistentes de Fast Refresh. Build correcto; editor y Excel mantienen paquetes grandes cargados bajo demanda.
 - Corregido el permiso de lectura de la carpeta releases detectado en el primer intento. Publicador probado sobre el servidor real; evita recompilar si el árbol del frontend y el contenido del build coinciden.
 - Conectores externos y funcionalidad de negocio ABISSOL pendientes, fuera del alcance de esta base.
+
+
+## 2026-10-07 05:30 America/Lima · modo de trabajo obligatorio
+
+Incorporado íntegramente el texto proporcionado por el usuario en 06-GUIAS/MODO_DE_TRABAJO.md; AGENTS.md exige leerlo y aplicarlo en todas las tareas futuras del proyecto. Índice actualizado; cambios limitados a instrucciones y documentación. Se conserva el trabajo previo y el aislamiento del proyecto. Validación: igualdad de contenido con el adjunto, 15 secciones y enlace obligatorio correcto. Sin cambios funcionales, commit, push ni publicación.

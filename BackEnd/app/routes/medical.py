@@ -358,7 +358,8 @@ def cancel_emission(ident: int, payload: ReasonInput, request: Request, db: Sess
 
 
 def public_url(request, row):
-    return str(request.base_url).rstrip("/") + "/abissol/api/v1/medical/validate/" + row.token
+    from ..services.medical_public_links import verification_url
+    return verification_url(row)
 
 
 def letter_pdf(row, url):
@@ -712,14 +713,16 @@ def dispatches(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200
     return {"items": [{**dump(row), "issuance_code": code, "liquidation_code": liquidation_code, "invoice_number": invoice_number} for row, code, liquidation_code, invoice_number in rows], "total": total}
 
 
-def deliver(db, request, user, row, emission):
+def deliver(db, request, user, row, emission, real_test=False):
+    from ..services.medical_testing import check_delivery
+    check_delivery(db, emission, row.channel, row.recipient, real_test)
     before = dump(row)
     row.attempts += 1
     row.status, row.error = "sending", ""
     # Persistir el intento antes de contactar al proveedor; un corte no genera reintento automático.
     save(db, request, user, row, before)
     url = public_url(request, emission)
-    if emission.test_batch:
+    if emission.test_batch and not real_test:
         row.status='simulated'
         row.error='PRUEBA: envío registrado sin contactar correo ni WhatsApp.'
         return save(db,request,user,row,{'status':'sending'})
@@ -733,10 +736,14 @@ def deliver(db, request, user, row, emission):
             conditioned=conditions_file(db,emission)
             if conditioned:attachments.append((conditioned[1],conditioned[0].read_bytes(),conditioned[2]))
             body,html_body=welcome_message(db,emission,url,condition_available=bool(conditioned))
-            send_email(db,row.recipient,f'Bienvenido a ABISSOL · {emission.plan_name}',body,html=html_body,attachments=attachments)
+            if emission.test_batch:
+                body='PRUEBA — NO ACREDITA COBERTURA REAL\n\n'+body
+                html_body='<p><strong>PRUEBA — NO ACREDITA COBERTURA REAL</strong></p>'+html_body
+            send_email(db,row.recipient,('PRUEBA · ' if emission.test_batch else '')+f'Bienvenido a ABISSOL · {emission.plan_name}',body,html=html_body,attachments=attachments)
 
         else:
             body = insured_message(db, emission, row.channel, url)
+            if emission.test_batch:body='PRUEBA — NO ACREDITA COBERTURA REAL\n\n'+body
             send_whatsapp(db, row.recipient, body)
         row.status = "sent"
     except Exception:

@@ -1,5 +1,15 @@
 # Pendientes
 
+## Corte definitivo: revisión vigente del 09/10/2026
+
+La [revisión por opción](../03-MODULOS/REVISION_CORTE_20261009.md) reemplaza
+las listas iniciales siguientes como diagnóstico de preparación. **No retirar
+Laravel todavía:** faltan operaciones fiscales (notas/anulación/CDR histórico),
+continuidad de seis liquidaciones importadas abiertas, corrección de emisiones,
+consulta pública por código/DNI, numeración definitiva y cambio productivo ALP.
+Navegación y 21 pruebas focalizadas aprobadas; servicios externos reales y
+aceptación SUNAT no se ejecutaron en esta auditoría. V2 sigue en modo pruebas.
+
 - Aceptación del piloto por el usuario: https://v2.abissol.org/.
 - Definir e implementar la funcionalidad ABISSOL en una etapa posterior.
 - Configurar y probar únicamente las integraciones externas que ABISSOL necesite.
@@ -10,3 +20,8 @@
 Publicación en GitHub autorizada y realizada directamente en main. Piloto desplegado en alp, dominio v2.abissol.org, con base independiente abissol_v2 y una cuenta administradora inicial. Login, cambio de clave y menú usan la marca oficial. Las 18 rutas del menú cargaron sin errores en navegador. Entornos privados excluidos de Git.
 
 No activar módulos del origen ni conectar bases anteriores por similitud de nombres.
+
+
+## 2026-10-07 05:30 America/Lima · modo de trabajo obligatorio
+
+Incorporado íntegramente el texto proporcionado por el usuario en 06-GUIAS/MODO_DE_TRABAJO.md; AGENTS.md exige leerlo y aplicarlo en todas las tareas futuras del proyecto. Índice actualizado; cambios limitados a instrucciones y documentación. Se conserva el trabajo previo y el aislamiento del proyecto. Validación: igualdad de contenido con el adjunto, 15 secciones y enlace obligatorio correcto. Sin cambios funcionales, commit, push ni publicación.

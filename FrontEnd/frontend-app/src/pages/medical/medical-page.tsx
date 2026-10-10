@@ -1,3 +1,4 @@
+import { EmissionDelivery } from './emission-delivery';
 import { SearchableSelect } from '@/components/searchable-select';
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Download, Plus, RefreshCw, Search, HeartPulse, Users, FileText, Send, Wallet, Receipt, ChartNoAxesCombined, Settings2 } from "lucide-react";
@@ -57,6 +58,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [delivery,setDelivery]=useState<Row|null>(null);
   const [search, setSearch] = useState("");
   const [query, setQuery] = useState("");
   const [emissionState, setEmissionState] = useState("all");
@@ -193,6 +195,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
         {section === "plans" && manager && <Button size="sm" variant="outline" onClick={() => planForm(r)}>Editar</Button>}
         {section === "network" && manager && lookup.global_access && <Button size="sm" variant="outline" onClick={() => profileForm(r)}>Editar</Button>}
         {section === "emissions" && <><Button size="sm" variant="outline" onClick={() => void download(`/emissions/${r.id}/letter`, `${r.code}.pdf`)}>Carta PDF</Button>{editor && r.status === "issued" && r.payment_status === "pending" && <Button size="sm" variant="outline" onClick={() => setModal({ title: "Confirmar cobro completo", path: `/emissions/${r.id}/payment`, fields: [{ name: "payment_status", label: "Destino del dinero", options: opts("collected_by_seller", ...(lookup.global_access ? ["paid_to_abissol"] : [])) }, { name: "reference", label: "Referencia del cobro" }], description: `Se registrará el cobro de ${money(r.price)}.` })}>Registrar cobro</Button>}{manager && r.status === "issued" && r.payment_status === "pending" && <Button size="sm" variant="outline" onClick={() => setModal({ title: "Anular emisión", path: `/emissions/${r.id}/cancel`, fields: [reason] })}>Anular</Button>}</>}
+        {section === "emissions" && r.status === "issued" && can("medical-dispatches","editor") && <Button size="sm" variant="outline" onClick={()=>setDelivery(r)}>Enviar al cliente</Button>}
         {section === "billing" && <Button size="sm" variant="outline" onClick={() => setInvoiceId(Number(r.id))}>Historial y archivos</Button>}
         {section === "billing" && lookup.can_configure_billing && ['blocked','uncertain'].includes(String(r.sunat_status)) && <Button size="sm" variant="outline" disabled={busy} onClick={async()=>{setBusy(true);try{await api.post(`/medical/billing/${r.id}/retry`);await load();setNotice('Revisión programada. Si el envío fue incierto, solo se consultará el CDR.');}catch(e){setError(errorText(e));}finally{setBusy(false);}}}>Revisar SUNAT</Button>}
         {section === "billing" && editor && !r.legacy_id && r.status === "draft" && <Button size="sm" variant="outline" onClick={() => invoiceForm(r)}>Corregir</Button>}
@@ -202,6 +205,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
       </div></td>}</tr>)}</tbody></table></div>
       <footer className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"><span>{data.total} registros · {section === "plans" || section === "network" || section === "reports" ? "Listado completo" : `Página ${page + 1}`}</span>{!["plans", "network", "reports"].includes(section) && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={(page + 1) * 25 >= data.total || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button></div>}</footer>
     </section>
+    {delivery && <EmissionDelivery row={{id:Number(delivery.id),code:String(delivery.code),token:String(delivery.token),email:String(delivery.email||""),phone:String(delivery.phone||""),test_batch:delivery.test_batch?String(delivery.test_batch):null}} close={()=>setDelivery(null)}/>}
     {invoiceId !== null && <BillingHistory key={invoiceId} id={invoiceId} close={() => setInvoiceId(null)} download={download} />}
     {modal?.path === "/liquidations" && <LiquidationBuilder kind={liquidationKind || "seller"} profiles={profileOptions("responsible")} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Liquidación generada con las emisiones seleccionadas."); await load(section!=="liquidations"); }} />}
     {modal?.path === "/emissions" && <EmissionForm plans={lookup.plans.filter(p => p.active)} emitters={profileOptions()} globalAccess={lookup.global_access} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Emisión registrada correctamente."); await load(section!=="liquidations"); }} />}
