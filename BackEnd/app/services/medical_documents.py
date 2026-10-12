@@ -60,6 +60,9 @@ def archive(db,*,source,ident,key,actor,path,filename,content=None,file_path=Non
         bound=db.query(DocumentBinding).filter_by(source_type=source,source_id=ident,artifact_key=key).with_for_update().first()
         doc=db.get(Document,bound.document_id) if bound else None
         if doc:
+            # Reorganizing a bound document must not duplicate its binary or version.
+            if doc.folder_id != folder_id:
+                doc.folder_id=folder_id;doc.updated_at=utc_now()
             latest=db.query(DocumentVersion).filter_by(document_id=doc.id,number=doc.current_version).one()
             if latest.sha256==digest:
                 documents.file_path(latest.storage_key)
@@ -96,6 +99,64 @@ def record_path(category,row,date):
     return path
 
 
+def affiliate_path(row):
+    """Identity is document type/number, never a mutable name or invoice buyer."""
+    identity=str(row.document_type).strip().upper()+':'+str(row.document_number).strip().upper()
+    key='abissol:affiliate:'+hashlib.sha256(identity.encode()).hexdigest()
+    name=' '.join(row.customer.split()).upper()
+    return [('abissol','ABISSOL'),('abissol:affiliates','Afiliados'),
+            (key,f'{name[:140]} · {row.document_type} {row.document_number}'),
+            ('abissol:affiliate:emission:'+str(row.id),row.code)]
+
+
+def invoice_path(db,row):
+    from ..models.medical import MedicalIssuance
+    emission=db.get(MedicalIssuance,row.issuance_id) if row.issuance_id else None
+    if emission:
+        return affiliate_path(emission)+[('abissol:affiliate:invoice:'+str(row.id),row.full_number or str(row.id))]
+    # Unlinked historical invoices are not evidence of an affiliate identity.
+    return record_path('invoice',row,row.issue_date)
+
+
+def organize_affiliates(db,actor):
+    """Metadata-only, idempotent relocation. Original bindings/versions stay intact."""
+    from ..models.medical import MedicalIssuance,MedicalInvoice
+    moved=0;unlinked=0;cached={}
+    def relocate(doc,path):
+        nonlocal moved
+        key=path[-1][0]
+        if key not in cached:cached[key]=folders(db,actor,path)
+        if doc.folder_id!=cached[key]:
+            doc.folder_id=cached[key];doc.updated_at=utc_now();moved+=1
+    for doc,row in db.query(Document,MedicalIssuance).join(DocumentBinding,DocumentBinding.document_id==Document.id).join(MedicalIssuance,MedicalIssuance.id==DocumentBinding.source_id).filter(DocumentBinding.source_type=='emission',Document.is_system.is_(True)):
+        relocate(doc,affiliate_path(row))
+    for doc,invoice,emission in db.query(Document,MedicalInvoice,MedicalIssuance).join(DocumentBinding,DocumentBinding.document_id==Document.id).join(MedicalInvoice,MedicalInvoice.id==DocumentBinding.source_id).outerjoin(MedicalIssuance,MedicalIssuance.id==MedicalInvoice.issuance_id).filter(DocumentBinding.source_type=='invoice',Document.is_system.is_(True)):
+        if emission:
+            relocate(doc,affiliate_path(emission)+[('abissol:affiliate:invoice:'+str(invoice.id),invoice.full_number or str(invoice.id))])
+        else:unlinked+=1
+    # Imported originals also remain browsable under their affiliate. Preserve
+    # their personal ownership/shares and versions; never infer by customer name.
+    from ..models.legacy import LegacyRecord
+    from ..utils.secrets import decrypt_secret
+    emissions={r.id:r for r in db.query(MedicalIssuance)}
+    invoices={r.id:r for r in db.query(MedicalInvoice)}
+    references={(r.source_table,r.source_key):r.target_id for r in db.query(LegacyRecord).filter(LegacyRecord.source_table.in_(['medical_issuances','billing_invoices']))}
+    for doc,record in db.query(Document,LegacyRecord).join(LegacyRecord,LegacyRecord.target_id==Document.id).filter(LegacyRecord.source_table=='documents',Document.is_system.is_(False)):
+        raw=json.loads(decrypt_secret(record.payload_encrypted))
+        entity=raw.get('entity_type');ident=str(raw.get('entity_id'))
+        invoice=None;emission=None
+        if entity=='medical_issuance':emission=emissions.get(references.get(('medical_issuances',ident)))
+        elif entity=='billing_invoice':
+            invoice=invoices.get(references.get(('billing_invoices',ident)))
+            if invoice:emission=emissions.get(invoice.issuance_id)
+        if emission:
+            path=affiliate_path(emission)
+            if invoice:path+=[('abissol:affiliate:invoice:'+str(invoice.id),invoice.full_number or str(invoice.id))]
+            relocate(doc,path)
+    db.flush()
+    return {'moved':moved,'unlinked_invoice_documents':unlinked}
+
+
 def legacy_file(db,source_path):
     key=hashlib.sha256(str(source_path).replace('\\','/').encode()).hexdigest()
     return db.query(LegacyFile).filter_by(path_hash=key).first() if source_path else None
@@ -110,8 +171,14 @@ def legacy_path(file):
 
 def emission(db,row,actor=None):
     from ..routes import medical as m
-    if binding(db,'emission',row.id,'letter'):return
-    kwargs=dict(source='emission',ident=row.id,key='letter',actor=actor or row.created_by,path=record_path('emission',row,row.sale_date),filename=row.code+'.pdf',description='Certificado del programa · '+row.customer)
+    path=affiliate_path(row)
+    bound=binding(db,'emission',row.id,'letter')
+    if bound:
+        doc=db.get(Document,bound.document_id)
+        folder_id=folders(db,actor or row.created_by,path)
+        if doc.folder_id!=folder_id:doc.folder_id=folder_id;doc.updated_at=utc_now()
+        return
+    kwargs=dict(source='emission',ident=row.id,key='letter',actor=actor or row.created_by,path=path,filename=row.code+'.pdf',description='Certificado del programa · '+row.customer)
     if row.legacy_id:
         file=legacy_file(db,m.legacy_data(db,'medical_issuances',row.legacy_id).get('welcome_letter_path'))
         if not file:return
@@ -135,7 +202,7 @@ def invoice(db,row,actor=None):
         filename=(row.full_number or str(row.id))+'-'+kind+path.suffix
         # Legacy storage keys may have no extension; use the actual original name.
         if row.legacy_id:filename=(row.full_number or str(row.id))+'-'+kind+Path(file.filename).suffix.lower()
-        archive(db,source='invoice',ident=row.id,key=kind,actor=actor or row.created_by,path=record_path('invoice',row,row.issue_date),
+        archive(db,source='invoice',ident=row.id,key=kind,actor=actor or row.created_by,path=invoice_path(db,row),
             filename=filename,file_path=path,expected_hash=digest,description='Comprobante · '+row.customer)
 
 
@@ -183,6 +250,7 @@ def plan(db,row,actor):
 def sync(db,actor):
     from ..routes import medical as m
     from ..models.documents import DocumentBinding
+    organization=organize_affiliates(db,actor);db.commit()
     before=db.query(DocumentBinding).count()
     missing=[]
     tasks=[('emission',db.query(m.Issuance).order_by(m.Issuance.id),lambda row:emission(db,row,actor)),
@@ -204,4 +272,4 @@ def sync(db,actor):
     for row in db.query(m.Liquidation).filter_by(kind='meta').order_by(m.Liquidation.id):
         entries=db.query(m.Issuance).join(m.Item,m.Item.issuance_id==m.Issuance.id).filter(m.Item.liquidation_id==row.id).order_by(m.Issuance.id).all()
         if entries:monthly(db,row,entries,actor);db.commit()
-    return {'created':db.query(DocumentBinding).count()-before,'bindings':db.query(DocumentBinding).count(),'missing_originals':missing}
+    return {'created':db.query(DocumentBinding).count()-before,'bindings':db.query(DocumentBinding).count(),'missing_originals':missing,'organization':organization}

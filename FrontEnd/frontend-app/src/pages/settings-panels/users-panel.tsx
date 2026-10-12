@@ -3,6 +3,7 @@ import { Check, ChevronsUpDown, Circle, Eye, KeyRound, Pencil, Plus, Power, Powe
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
+import { SearchableSelect } from "@/components/searchable-select";
 import { Button } from "@/components/ui/button";
 import { ActionButton } from "@/components/action-button";
 import { ConfirmActionDialog } from "@/components/confirm-action-dialog";
@@ -66,6 +67,9 @@ export default function UsersPanel() {
   const auth = useAuth();
   const navigate = useNavigate();
   const { settings } = usePlatformSettings();
+  const [impersonationOpen, setImpersonationOpen] = useState(false);
+  const [impersonationTarget, setImpersonationTarget] = useState("");
+  const [impersonating, setImpersonating] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [editing, setEditing] = useState<number | null>(null);
@@ -203,13 +207,16 @@ export default function UsersPanel() {
     if (doubleClickAction === "access" && canViewAccess) openAccess(user);
   };
   const startImpersonation = async (user: User) => {
+    if (impersonating) return;
+    setImpersonating(true);
     try {
       await auth.startImpersonation(user.id);
       toast.success(`Ahora estás viendo ABISSOL V2 como ${user.nombre}`);
-      navigate("/home");
+      setImpersonationOpen(false);
+      navigate("/inicio");
     } catch (error) {
       toast.error(apiErrorMessage(error, "No se pudo iniciar la impersonación"));
-    }
+    } finally { setImpersonating(false); }
   };
   const contextActions = (user: User) => [
     { label: "Editar", icon: Pencil, disabled: !canEdit, onSelect: () => { void openEdit(user); } },
@@ -217,7 +224,7 @@ export default function UsersPanel() {
     { label: "Restablecer clave...", icon: KeyRound, disabled: !canEdit || !user.is_active, onSelect: () => { setResetChannels({ notificar_correo: false, notificar_whatsapp: false }); setResetUser(user); } },
     { label: user.is_active ? "Desactivar..." : "Activar...", icon: user.is_active ? PowerOff : Power, destructive: user.is_active, disabled: !canManage || user.id === auth.user?.id || (user.roles.some((role) => role.es_superusuario) && !isProgrammer), onSelect: () => document.getElementById(`user-state-${user.id}`)?.click() },
     { label: "Eliminar...", icon: Trash2, destructive: true, disabled: !canManage || user.id === auth.user?.id || (user.roles.some((role) => role.es_superusuario) && !isProgrammer), onSelect: () => document.getElementById(`user-delete-${user.id}`)?.click() },
-    ...(isProgrammer ? [{ label: "Entrar como este usuario", icon: Eye, disabled: !user.is_active || user.id === auth.user?.id || user.roles.some((role) => role.es_superusuario), onSelect: () => { void startImpersonation(user); } }] : []),
+    ...(isProgrammer ? [{ label: "Impersonar usuario", icon: Eye, disabled: !user.is_active || user.id === auth.user?.id || user.roles.some((role) => role.es_superusuario), onSelect: () => { void startImpersonation(user); } }] : []),
   ];
   const visibleUsers = useMemo(() => users
     .filter((user) => includesSearch([
@@ -249,8 +256,10 @@ export default function UsersPanel() {
   return <main className="space-y-5 p-5 md:p-7">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div><h1 className="text-2xl font-semibold">Usuarios</h1><p className="text-sm text-muted-foreground">Cuentas, roles e identificadores de acceso.</p></div>
-      <div className="flex flex-wrap items-center gap-2">{canEdit && <ActionButton tone="new" onClick={() => { void openCreate(); }}><Plus className="size-4" />Nuevo usuario</ActionButton>}<ExcelDownloadButton onDownload={exportUsers} disabled={visibleUsers.length === 0} /></div>
+      <div className="flex flex-wrap items-center gap-2">{isProgrammer && <Button variant="outline" onClick={() => setImpersonationOpen(true)}><Eye className="size-4" />Impersonar usuario</Button>}{canEdit && <ActionButton tone="new" onClick={() => { void openCreate(); }}><Plus className="size-4" />Nuevo usuario</ActionButton>}<ExcelDownloadButton onDownload={exportUsers} disabled={visibleUsers.length === 0} /></div>
     </div>
+
+    <Sheet open={impersonationOpen && isProgrammer} onOpenChange={open=>{if(!impersonating)setImpersonationOpen(open);}}><SheetContent className="w-full sm:max-w-lg"><SheetHeader><SheetTitle>Impersonar usuario</SheetTitle><SheetDescription>Entra con sus permisos y alcance comercial. Las acciones quedan registradas con tu identidad de Programador.</SheetDescription></SheetHeader><SheetBody className="space-y-4"><Label>Usuario</Label><SearchableSelect aria-label="Usuario a impersonar" value={impersonationTarget} onValueChange={setImpersonationTarget} disabled={impersonating} placeholder="Buscar nombre, usuario o correo" options={users.filter(u=>u.is_active && u.id!==auth.user?.id && !u.roles.some(r=>r.es_superusuario)).map(u=>({value:String(u.id),label:`${u.nombre} ${u.apellido} · ${u.username} · ${u.correo}`}))}/><p className="text-xs text-muted-foreground">No necesitas su contraseña. Para salir, usa Volver a mi usuario en la barra superior. Si tiene pendiente cambiar su clave, primero deberá completar ese paso.</p></SheetBody><SheetFooter><Button variant="outline" disabled={impersonating} onClick={()=>setImpersonationOpen(false)}>Cancelar</Button><Button disabled={impersonating||!impersonationTarget} onClick={()=>{const target=users.find(u=>u.id===Number(impersonationTarget));if(target)void startImpersonation(target);}}><Eye className="size-4"/>{impersonating?'Ingresando…':'Entrar como usuario'}</Button></SheetFooter></SheetContent></Sheet>
 
     <Sheet open={showForm && canEdit} onOpenChange={(open) => { if (!open) closeForm(); }}><SheetContent className="w-full sm:max-w-2xl">
       <SheetHeader><SheetTitle>{editing ? "Editar usuario" : "Nuevo usuario"}</SheetTitle><SheetDescription>Podrá iniciar sesión con su correo, nombre de usuario o teléfono.</SheetDescription></SheetHeader>

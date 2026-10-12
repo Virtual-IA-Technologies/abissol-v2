@@ -1,5 +1,20 @@
 # Estado actual
 
+## Archivo por afiliado — 12/10/2026
+
+Preparada estructura Afiliados → nombre/documento → certificado, con cartas y
+comprobantes vinculados, incluidos originales históricos. Reorganización de metadatos
+idempotente, conservando versiones y permisos. Publicación autorizada en main y V2.
+[Detalle](../03-MODULOS/ARCHIVO_POR_AFILIADO.md).
+
+## Impersonación visible — 12/10/2026
+
+Preparada la opción Impersonar usuario en Usuarios, con panel lateral y búsqueda.
+Reutiliza identidad, permisos y auditoría existentes. Previene inicio cuando hay
+cambio obligatorio de contraseña pendiente. Prueba aislada aprobada; publicación
+autorizada en main y V2. [Detalle](../03-MODULOS/IMPERSONACION.md).
+
+
 ## Dashboard comercial — 10/10/2026
 
 Inicio incorpora emisiones, ventas, vigencias y liquidaciones según permisos, gráficos

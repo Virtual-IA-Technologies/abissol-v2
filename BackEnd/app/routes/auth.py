@@ -430,11 +430,15 @@ def start_impersonation(
         raise HTTPException(status_code=409, detail="Finaliza la impersonación actual")
     if not any(role.es_superusuario for role in identity.actor_user.active_roles()):
         raise HTTPException(status_code=403, detail="Solo Programador puede impersonar usuarios")
+    if identity.actor_user.requiere_cambio_clave:
+        raise HTTPException(403, "Debes cambiar tu contraseña antes de continuar")
     target = _load_user(db, user_id)
     if not target or target.id == identity.actor_user.id:
         raise HTTPException(status_code=422, detail="Usuario de destino inválido")
     if any(role.es_superusuario for role in target.active_roles()):
         raise HTTPException(status_code=403, detail="No se puede impersonar otro Programador")
+    if target.requiere_cambio_clave:
+        raise HTTPException(409, "El usuario debe completar su cambio de contraseña antes de impersonarlo")
     session = ImpersonationSession(
         impersonator_id=identity.actor_user.id,
         impersonated_id=target.id,
