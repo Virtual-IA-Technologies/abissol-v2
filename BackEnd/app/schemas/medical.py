@@ -114,6 +114,9 @@ class PaymentInput(Payload):
 class ReasonInput(Payload):
     reason: str = Field(min_length=5, max_length=1000)
 
+class SettlementApprovalInput(Payload):
+    reason: str = Field(default="", max_length=1000)
+
 class LiquidationInput(Payload):
     kind: Literal["seller", "meta", "platform"]
     responsible_id: int | None = Field(default=None, gt=0)

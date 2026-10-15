@@ -529,8 +529,9 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
         pending = filtered(pending, search, starts_on, ends_on)
         if status and status != 'pending': pending = pending.filter(false())
         sales_sum += pending.with_entities(func.coalesce(func.sum(Issuance.price), 0)).scalar()
-        combined = query.with_entities(Liquidation.id.label('id'), literal('liquidation').label('row_type'), Liquidation.created_at.label('created_at')).union_all(pending.with_entities(Issuance.id, literal('pending'), Issuance.created_at)).subquery()
-        selected = db.query(combined).order_by(combined.c.created_at.desc(), combined.c.id.desc()).offset(offset).limit(limit).all()
+        emission_order = db.query(func.max(Issuance.sale_date)).join(Item, Item.issuance_id == Issuance.id).filter(Item.liquidation_id == Liquidation.id).correlate(Liquidation).scalar_subquery()
+        combined = query.with_entities(Liquidation.id.label('id'), literal('liquidation').label('row_type'), emission_order.label('emission_date')).union_all(pending.with_entities(Issuance.id, literal('pending'), Issuance.sale_date)).subquery()
+        selected = db.query(combined).order_by(combined.c.emission_date.desc(), combined.c.id.desc()).offset(offset).limit(limit).all()
         ids = [row.id for row in selected if row.row_type == 'liquidation']
         pending_ids = [row.id for row in selected if row.row_type == 'pending']
         result = {'items': [dump(row) for row in query.filter(Liquidation.id.in_(ids)).all()], 'total': db.query(combined).count()}

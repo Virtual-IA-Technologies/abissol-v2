@@ -82,6 +82,7 @@ class SettlementTests(unittest.TestCase):
             db.commit()
         listing=self.client.get(API+'/liquidations?kind=seller&include_pending=true',headers=self.headers).json()
         self.assertEqual(listing['total'],2)
+        self.assertEqual([row['id'] for row in listing['items']], [self.liq['id'], -pending['id']])
         self.assertEqual(Decimal(listing['sales_sum']),110)
         virtual=next(row for row in listing['items'] if row.get('row_type')=='pending')
         self.assertEqual(virtual['issuance_id'],pending['id'])
@@ -110,10 +111,10 @@ class SettlementTests(unittest.TestCase):
         with self.sessions() as db:
             menu=db.query(Menu).filter_by(slug='medical-liquidations').one()
             db.add(AccessGrant(usuario_id=self.reader_id,menu_id=menu.id,access_level='gestor'));db.commit()
-        self.post(f'/liquidations/{self.liq["id"]}/settle',{'reason':'Revisado contra banco'},403,reader)
-        self.post(f'/liquidations/{self.liq["id"]}/settle',{'reason':'Revisado contra banco'})
+        self.post(f'/liquidations/{self.liq["id"]}/settle',{},403,reader)
+        self.post(f'/liquidations/{self.liq["id"]}/settle',{})
         self.assertEqual(self.detail()['status'],'paid')
-        self.post(f'/liquidations/{self.liq["id"]}/settle',{'reason':'Revisado contra banco'},409)
+        self.post(f'/liquidations/{self.liq["id"]}/settle',{},409)
         with self.sessions() as db:
             self.assertEqual(db.query(MedicalIssuance).one().payment_status,'settled')
             self.assertIsNotNone(db.query(MedicalVoucher).one().verified_at)

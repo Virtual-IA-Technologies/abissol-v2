@@ -7,7 +7,7 @@ from decimal import Decimal
 from ..database import get_db
 from ..services.access_control import require_access
 from ..services import medical_reconciliation as r
-from ..schemas.medical import ReasonInput
+from ..schemas.medical import ReasonInput, SettlementApprovalInput
 from ..utils.time import utc_now
 from . import medical as m
 
@@ -82,7 +82,7 @@ async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_
     return {'id':row.id,'code':row.code,'status':row.status,'notification_status':dispatch.status}
 
 @router.post('/liquidations/{ident}/settle')
-def settle(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):
+def settle(ident:int,payload:SettlementApprovalInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):
     m.global_only(user)
     row=m.find(m.liquidation_scope(db,user),ident,True)
     allowed = {'submitted','approved'} | ({'pending'} if row.legacy_id else set())
@@ -92,13 +92,14 @@ def settle(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_
     if deposits!=row.deposit_required or not vouchers:raise HTTPException(422,'El voucher no coincide con las emisiones seleccionadas')
     items=db.query(m.Issuance).join(m.Item,m.Item.issuance_id==m.Issuance.id).filter(m.Item.liquidation_id==ident).all()
     if not items or any(e.status!='issued' for e in items):raise HTTPException(409,'Revisa las emisiones incluidas antes de aprobar')
+    reason=payload.reason.strip() or "Aprobación de Oficina Principal"
     before=m.dump(row)
     for v in vouchers:
         if not v.verified_at:
             old=m.dump(v);v.verified_at=utc_now();v.verified_by=user.id
-            m.audit_change(db,request,user,'medical_voucher_verification',v.id,before=old,after={**m.dump(v),'reason':payload.reason},module='abissol_medical')
+            m.audit_change(db,request,user,'medical_voucher_verification',v.id,before=old,after={**m.dump(v),'reason':reason},module='abissol_medical')
     row.status='paid'
-    row.notes=(row.notes+'\nOficina Principal: '+payload.reason).strip()
+    row.notes=(row.notes+'\nOficina Principal: '+reason).strip()
     ids=db.query(m.Item.issuance_id).filter_by(liquidation_id=ident)
     db.query(m.Issuance).filter(m.Issuance.id.in_(ids.scalar_subquery())).update({'payment_status':'settled'},synchronize_session=False)
     return m.save(db,request,user,row,before)
