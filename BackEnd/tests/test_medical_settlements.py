@@ -48,6 +48,27 @@ class SettlementTests(unittest.TestCase):
         self.assertEqual(response.status_code,200,response.text)
         self.assertEqual(response.json()['items'],[])
 
+    def test_list_totals_pending_and_cancelled_visibility(self):
+        from app.models.medical import MedicalIssuance
+        from datetime import date
+        self.setup_sale()
+        pending = self.issuance(document_number='87654321')
+        cancelled = self.issuance(document_number='12348765')
+        with self.sessions() as db:
+            db.get(MedicalIssuance, cancelled['id']).status = 'cancelled'
+            db.add(MedicalLiquidation(kind='seller', responsible_id=self.profile_id, starts_on=date.fromisoformat(self.day), ends_on=date.fromisoformat(self.day), status='cancelled', code='CANCELLED', sales_total=55, commission_total=0, deposit_required=55, created_by=self.liq["created_by"]))
+            db.commit()
+        rows = self.client.get(API+'/liquidations', headers=self.headers).json()
+        self.assertEqual(rows['total'], 1)
+        self.assertEqual(Decimal(rows['sales_sum']), Decimal('55'))
+        history = self.client.get(API+'/liquidations?include_cancelled=true', headers=self.headers).json()
+        self.assertEqual(history['total'], 2)
+        self.assertEqual(Decimal(history['sales_sum']), Decimal('55'))
+        emissions = self.client.get(API+'/emissions?limit=1', headers=self.headers).json()
+        self.assertEqual(Decimal(emissions['sales_sum']), Decimal('110'))
+        rows = self.client.get(API+'/seller-pending', headers=self.headers).json()['items']
+        self.assertEqual([row['id'] for row in rows], [pending['id']])
+
     def test_selected_voucher_submit_email_and_office_close(self):
         from app.models.medical import MedicalBusinessSetting,MedicalDispatch,MedicalIssuance
         from app.models.settings import SmtpSetting

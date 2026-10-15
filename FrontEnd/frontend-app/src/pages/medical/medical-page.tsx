@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/side-dialog";
 
+import { PendingSettlements } from "./pending-settlements";
 import { VoucherPreview } from './voucher-preview';
 import type { SettlementDetail } from "./liquidation-detail";
 const EmissionForm=lazy(()=>import('./emission-form').then(m=>({default:m.EmissionForm})));
@@ -29,7 +30,7 @@ type Row = Record<string, Value>;
 type Option = { value: string; label: string };
 type Field = { name: string; label: string; type?: string; options?: Option[]; optional?: boolean; help?: string };
 type Lookup = { plans: Row[]; sources: Row[]; profiles: Row[]; users: { id: number; name: string; is_active: boolean; roles: string[] }[]; emissions: Row[]; global_access: boolean; can_configure_billing?: boolean; can_configure_communications?: boolean; test_batch?: string | null; fiscal_enabled?: boolean };
-type Listing = { summary?: Record<string, number>; items: Row[]; total: number; count?: number; sales?: string; collected?: string; pending?: string; commissions?: string; provider_cost?: string; unliquidated?: string; expiring?: number };
+type Listing = { sales_sum?: string; summary?: Record<string, number>; items: Row[]; total: number; count?: number; sales?: string; collected?: string; pending?: string; commissions?: string; provider_cost?: string; unliquidated?: string; expiring?: number };
 type Detail = Row & { items?: never; vouchers?: never };
 type Modal = { title: string; path: string; method?: "post" | "put"; fields: Field[]; initial?: Row; description?: string };
 const empty: Lookup = { plans: [], sources: [], profiles: [], users: [], emissions: [], global_access: false };
@@ -85,7 +86,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     const version = ++requestVersion.current;
     setLoading(true); setError("");
     try {
-      const params = { offset: page * 25, limit: 25, kind: liquidationKind, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined };
+      const params = { offset: page * 25, limit: 25, kind: liquidationKind, include_cancelled: history || undefined, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined };
       if (refreshReferences) { referencesCache.current = null; referencesPending.current = null; }
       if (!referencesCache.current && !referencesPending.current) {
         const request = api.get<Lookup>("/medical/lookups", { params: { section } }).then(r => r.data).finally(() => { if (referencesPending.current === request) referencesPending.current = null; });
@@ -102,7 +103,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
 
     } catch (e) { if (version === requestVersion.current) setError(errorText(e)); }
     finally { if (version === requestVersion.current) setLoading(false); }
-    }, [section, page, serverQuery, start, end, liquidationKind, emissionState]);
+    }, [section, page, serverQuery, start, end, liquidationKind, emissionState, history]);
   useEffect(() => { void load(false); }, [load]);
   const userName = (id: Value) => { const account = lookup.users.find(u => u.id === Number(id)); return account ? `${account.name}${account.is_active ? "" : " · Cuenta desactivada"}` : `Usuario ${id}`; };
   const profileName = (id: Value) => { if (!id) return "Consolidado general"; const p = lookup.profiles.find(p => p.id === Number(id)); return p ? String(p.display_name || userName(p.user_id)) : `Perfil ${id}`; };
@@ -173,7 +174,17 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     setBusy(true);
     try {
       const { downloadExcelXlsx } = await import("@/lib/table-tools");
-      await downloadExcelXlsx(`abissol-${section}`, data.items, columns[section].map(([header, value]) => ({ header, value })), { organizationName: "ABISSOL", criteria: { Módulo: titles[section], Página: page + 1, Desde: start, Hasta: end } });
+      const { exportColumns, exportFooter } = await import("./medical-export");
+      const exportData = section === "emissions" || section === "liquidations" ? [] as Row[] : [...data.items];
+      if (section === "emissions" || section === "liquidations") {
+        while (exportData.length < data.total) {
+          const response = await api.get<Listing>(`/medical/${section}`, { params: { offset: exportData.length, limit: 200, kind: liquidationKind, include_cancelled: history || undefined, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined } });
+          if (!response.data.items.length) break;
+          exportData.push(...response.data.items);
+        }
+      }
+      const cols = exportColumns(section, columns[section]);
+      await downloadExcelXlsx(`abissol-${section}`, exportData, cols, { organizationName: "ABISSOL", criteria: { Módulo: titles[section], Desde: start, Hasta: end }, footer: exportFooter(section, exportData, cols) });
     } catch (e) { setError(errorText(e)); } finally { setBusy(false); }
   }
   async function openLetter(r: Row, kind: "letter" | "receipt" | "conditions" = "letter") {
@@ -243,6 +254,8 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
       </div></td>}</MedicalRow>)}</tbody></table></div>
       <footer className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"><span>{data.total} registros · {section === "plans" || section === "network" || section === "reports" ? "Listado completo" : `Página ${page + 1}`}</span>{!["plans", "network", "reports"].includes(section) && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={(page + 1) * 25 >= data.total || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button></div>}</footer>
     </section>
+    {data.sales_sum !== undefined && !loading && <p className="text-right text-sm font-semibold">Total del listado (sin anulados): {money(data.sales_sum)}</p>}
+    {section === "liquidations" && liquidationKind === "seller" && !history && <PendingSettlements refreshKey={data} />}
     {voucherDetail && <VoucherPreview detail={voucherDetail} close={()=>setVoucherDetail(null)}/>}
     {recordPreview && <Dialog open onOpenChange={open=>{if(!open)setRecordPreview(null);}}><DialogContent><DialogHeader><DialogTitle>{titles[section]} · Detalle</DialogTitle><DialogDescription>Consulta del registro seleccionado.</DialogDescription></DialogHeader><dl className="space-y-4">{columns[section].map(([label,render])=><div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="break-words font-medium">{render(recordPreview)}</dd></div>)}</dl></DialogContent></Dialog>}
     {letterPreview && <Dialog open onOpenChange={open=>{if(!open)setLetterPreview(null);}}><DialogContent className="sm:max-w-5xl"><DialogHeader><DialogTitle>{letterPreview.code}</DialogTitle><DialogDescription>Documento del programa de asistencia.</DialogDescription></DialogHeader><iframe title="Documento del programa" src={letterPreview.url} className="h-[75vh] w-full rounded-lg border" /></DialogContent></Dialog>}

@@ -14,7 +14,7 @@ from . import medical as m
 router=APIRouter(prefix='/medical')
 
 @router.get('/seller-pending')
-def pending(responsible_id:int|None=None,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','editor'))):
+def pending(responsible_id:int|None=None,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations'))):
     own=m.profile(db,user)
     if not m.admin(user) and not own:raise HTTPException(403,'Tu perfil no prepara liquidaciones')
     query=m.scope(db,user).filter(m.Issuance.status=='issued',m.Issuance.payment_status.in_(['pending','collected_by_seller']))

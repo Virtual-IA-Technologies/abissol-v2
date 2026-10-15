@@ -361,7 +361,9 @@ def emissions(search: str = Query("", max_length=180), starts_on: date | None = 
         raise HTTPException(422, "Estado de vigencia inválido")
     counts = query.with_entities(func.count(Issuance.id), *[func.sum(case((condition, 1), else_=0)) for condition in states.values()]).one()
     summary = dict(zip(["all", *states], [int(value or 0) for value in counts]))
-    return {**page(query.filter(states[state]) if state != "all" else query, offset, limit), "summary": summary}
+    selected = query.filter(states[state]) if state != "all" else query
+    sales = selected.filter(Issuance.status != "cancelled").with_entities(func.coalesce(func.sum(Issuance.price), 0)).scalar()
+    return {**page(selected, offset, limit), "summary": summary, "sales_sum": str(sales)}
 
 
 @router.post("/emissions")
@@ -501,8 +503,9 @@ def liquidation_amounts(emission, kind):
 @router.get("/liquidations")
 def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), kind: str | None = None,
                  search: str = Query("", max_length=180), status: str | None = None, starts_on: date | None = None, ends_on: date | None = None,
-                 db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations"))):
+                 db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations")), include_cancelled: bool = False):
     query = liquidation_scope(db, user)
+    if not include_cancelled and not status: query = query.filter(Liquidation.status != "cancelled")
     if kind:
         if kind not in {"seller", "meta", "platform"}: raise HTTPException(422, "Tipo de liquidación inválido")
         query = query.filter(Liquidation.kind == kind)
@@ -513,6 +516,7 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
     if starts_on: query = query.filter(Liquidation.ends_on >= starts_on)
     if ends_on: query = query.filter(Liquidation.starts_on <= ends_on)
     result=page(query, offset, limit)
+    result['sales_sum'] = str(query.filter(Liquidation.status != 'cancelled').with_entities(func.coalesce(func.sum(Liquidation.sales_total), 0)).scalar())
     ids=[r['id'] for r in result['items']]
     insured = {}
     for liquidation_id, customer in db.query(Item.liquidation_id, Issuance.customer).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id.in_(ids)).order_by(Item.id) if ids else []:

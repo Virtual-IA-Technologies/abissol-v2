@@ -27,7 +27,7 @@ export function includesSearch(values: Array<unknown>, query: string) {
   return values.some((value) => String(value ?? "").toLocaleLowerCase("es").includes(normalized));
 }
 
-export type ExportCell = string | number | boolean | null | undefined;
+export type ExportCell = string | number | boolean | Date | null | undefined;
 
 export interface ExportColumn<Row> {
   header: string;
@@ -122,7 +122,9 @@ export async function downloadExcelXlsx<Row>(
       if (rowIndex % 2 === 1) {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFF0FDF4" } };
       }
-      if (typeof cell.value === "number") {
+      if (cell.value instanceof Date) {
+        cell.numFmt = columns[columnIndex - 1]?.numberFormat ?? "dd/mm/yyyy";
+      } else if (typeof cell.value === "number") {
         cell.numFmt = columns[columnIndex - 1]?.numberFormat ?? (Number.isInteger(cell.value) ? "#,##0" : "#,##0.00");
       }
     });
