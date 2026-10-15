@@ -31,11 +31,9 @@ No activar módulos del origen ni conectar bases anteriores por similitud de nom
 
 Incorporado íntegramente el texto proporcionado por el usuario en 06-GUIAS/MODO_DE_TRABAJO.md; AGENTS.md exige leerlo y aplicarlo en todas las tareas futuras del proyecto. Índice actualizado; cambios limitados a instrucciones y documentación. Se conserva el trabajo previo y el aislamiento del proyecto. Validación: igualdad de contenido con el adjunto, 15 secciones y enlace obligatorio correcto. Sin cambios funcionales, commit, push ni publicación.
 
-## Activación de chat ABISSOL → Virtual IA — 14/10/2026
+## Chat ABISSOL conectado - resuelto el 14/10/2026
 
-Implementación local lista. Pendientes: autorización expresa de publicación,
-conector exclusivo ABISSOL con cliente/departamento verificados, credencial propia
-en backend productivo y migración 0017 con respaldo. Validar directorios en ambos
-sitios, etiqueta ABISSOL y presencia/caducidad reales sin enviar mensajes no autorizados.
-MariaDB local no está escuchando; no se aplicó la migración en esta sesión.
-Ver 03-MODULOS/CHAT_SISTEMAS.md. Los cambios previos ajenos se conservaron.
+Publicacion autorizada y completada; conector exclusivo, credencial, migracion y
+directorios productivos verificados. Se comprobo conectado/desconectado sin
+mensajes reales. Solo falta QA visual del usuario; MariaDB local sigue detenida,
+pero la migracion y el upsert se ejecutaron correctamente en produccion.

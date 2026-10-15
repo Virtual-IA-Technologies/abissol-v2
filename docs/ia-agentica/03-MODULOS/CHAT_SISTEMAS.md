@@ -1,6 +1,6 @@
 # Chat de ABISSOL con Sistemas de Virtual IA
 
-Implementado localmente el 14/10/2026. Activación productiva pendiente.
+Publicado y conectado en producción el 14/10/2026; ver evidencia al final.
 
 ## Uso e identidad
 
@@ -66,3 +66,21 @@ commit, push ni publicación productiva durante esta tarea.
 
 Verificación final: ESLint de ambos componentes aprobado y SQL MySQL de la migración
 0017 generado correctamente sin conectar ni modificar bases. Diff sin errores de espacios.
+
+## 14/10/2026 19:14 America/Lima - Chat publicado y conectado
+
+Publicado el codigo de main `4f48e722159f84ba33d942f50b7987a5cbadb2f8` por el
+publicador oficial, con respaldo SQL verificado, migracion 0017 aplicada y salud
+HTTPS 200. Bundle publico y chunk de Chat cotejados por SHA-256 con la release.
+Conector productivo exclusivo ABISSOL: cliente 20 y departamento 3 verificados en
+Virtual IA; credencial nueva solo en backend ABISSOL y hash en Virtual IA.
+Directorio productivo: 71 personas activas, etiqueta ABISSOL confirmada en la
+consulta de Contactos de Sistemas. GET contactos y POST presencia HTTPS 200,
+tres operadores; sesion temporal cerrada (204) y revocacion comprobada.
+Propagacion de conectado/desconectado comprobada entre ambos servidores; no se
+enviaron mensajes. Cadencias: publicador 5 s, directorios/mensajes abiertos 3 s,
+pulso visible 20 s, caducidad 60 s. Son consultas periodicas, no WebSocket.
+Ocho pruebas focalizadas, TypeScript, ESLint y build productivo aprobados.
+Virtual IA ya tenia presencia y directorio cada 3 s; no se desplego ni reinicio
+su aplicacion. Respaldos privados de conectores y entorno guardados en servidor.
+Pendiente solo comprobacion visual del usuario tras recargar ambas plataformas.

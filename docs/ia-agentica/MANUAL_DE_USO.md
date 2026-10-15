@@ -22,8 +22,7 @@ mensajes anteriores. Cada envío identifica tu usuario de ABISSOL ante Virtual I
 Los estados se actualizan automáticamente. «Sin actualizar» indica que no se pudo
 consultar el estado; puedes reintentar. Puedes escribir aunque Sistemas figure
 desconectado. El chat se oculta durante la impersonación: vuelve a tu cuenta para
-conversar. La presencia no registra jornada laboral. Esta función está preparada
-localmente; falta activar el conector y publicarla en el piloto.
+conversar. La presencia no registra jornada laboral. El chat está activo en el piloto; recarga la plataforma para ver la opción Chat.
 
 Desde el menú puedes administrar usuarios, roles y accesos, revisar auditoría,
 organizar calendario y notificaciones, y trabajar con documentos. Las opciones
