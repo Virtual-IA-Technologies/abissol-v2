@@ -56,5 +56,5 @@ class DashboardTests(unittest.TestCase):
         self.assertEqual(admin['emissions']['count'],0)
         hidden=self.client.get(medical.API+'/dashboard',headers=headers).json()
         self.assertIsNone(hidden['emissions']);self.assertIsNone(hidden['liquidations'])
-        self.assertEqual(self.client.get(medical.API+'/dashboard?days=999',headers=self.headers).status_code,422)
+        self.assertEqual(self.client.get(medical.API+'/dashboard?months=13',headers=self.headers).status_code,422)
         self.assertEqual(self.client.get(medical.API+'/dashboard').status_code,401)

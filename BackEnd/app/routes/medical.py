@@ -43,7 +43,7 @@ STORAGE = Path(__file__).resolve().parents[2] / "storage" / "medical"
 
 
 @router.get("/dashboard")
-def dashboard(days: int = Query(30, ge=7, le=90), db: Session = Depends(get_db), identity=Depends(get_current_identity)):
+def dashboard(months: int = Query(3, ge=1, le=12), db: Session = Depends(get_db), identity=Depends(get_current_identity)):
     """Aggregate only authorized real records; no documents or per-row queries."""
     from ..services.access_control import access_by_slug
     user = identity.effective_user
@@ -51,7 +51,8 @@ def dashboard(days: int = Query(30, ge=7, le=90), db: Session = Depends(get_db),
         raise HTTPException(403, "Debes cambiar tu contraseña antes de continuar")
     access = access_by_slug(db, user)
     today = datetime.now(ZoneInfo('America/Lima')).date()
-    since = today - timedelta(days=days - 1)
+    first_month = today.year * 12 + today.month - months
+    since = date(first_month // 12, first_month % 12 + 1, 1)
     result = {'since': since.isoformat(), 'until': today.isoformat(), 'emissions': None, 'liquidations': None}
     if 'medical-emissions' in access:
         q = scope(db, user).filter(Issuance.test_batch.is_(None), Issuance.status == 'issued', ~Issuance.code.like('PRUEBA-%'))
@@ -63,10 +64,12 @@ def dashboard(days: int = Query(30, ge=7, le=90), db: Session = Depends(get_db),
                   func.sum(case((pending, 1), else_=0)).label('pending_count'),
                   func.sum(case((pending, Issuance.price), else_=0)).label('pending_amount')]
         values = q.with_entities(*fields).one()
-        trend = q.filter(period).with_entities(Issuance.sale_date, func.count(Issuance.id), func.sum(Issuance.price)).group_by(Issuance.sale_date).order_by(Issuance.sale_date).all()
+        month = (func.strftime('%Y-%m', Issuance.sale_date) if db.get_bind().dialect.name == 'sqlite'
+                 else func.date_format(Issuance.sale_date, '%Y-%m'))
+        trend = q.filter(period).with_entities(month, func.count(Issuance.id), func.sum(Issuance.price)).group_by(month).order_by(month).all()
         recent = q.order_by(Issuance.id.desc()).with_entities(Issuance.code, Issuance.plan_name, Issuance.sale_date, Issuance.price).limit(5).all()
         result['emissions'] = {k: str(v or 0) if k in {'sales', 'pending_amount'} else int(v or 0) for k, v in values._mapping.items()}
-        result['emissions'].update(trend=[{'date': str(d), 'count': n, 'sales': str(s)} for d, n, s in trend],
+        result['emissions'].update(trend=[{'date': f'{d}-01', 'count': n, 'sales': str(s)} for d, n, s in trend],
                                    recent=[{'code': c, 'plan': p, 'date': str(d), 'amount': str(a)} for c, p, d, a in recent])
     if 'medical-liquidations' in access:
         vouchers = db.query(Voucher.liquidation_id).filter(Voucher.active.is_(True), Voucher.purpose == 'deposit').distinct()
