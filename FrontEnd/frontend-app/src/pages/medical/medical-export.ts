@@ -11,6 +11,8 @@ export function exportColumns(section: string, fallback: [string, (row: Row) => 
   if (section !== "emissions" && section !== "liquidations") return cols;
   for (const col of cols) {
     if (col.header === "Registrada") { col.value = row => dateValue(row.created_at, true); col.numberFormat = "dd/mm/yyyy hh:mm"; }
+    const dateKey = col.header === "Fecha de emisión" ? "emission_on" : col.header === "Fecha de depósito" ? "deposit_on" : null;
+    if (section === "liquidations" && dateKey) { col.value = row => dateValue(row[dateKey]); col.numberFormat = "dd/mm/yyyy"; }
     if (col.header === "Importe" || col.header === "Ventas") { col.value = row => Number(row[section === "emissions" ? "price" : "sales_total"] || 0); col.numberFormat = "#,##0.00"; }
   }
   const dates = (key: string, header: string): ExportColumn<Row> => ({ header, value: row => dateValue(row[key]), numberFormat: "dd/mm/yyyy" });
@@ -19,6 +21,7 @@ export function exportColumns(section: string, fallback: [string, (row: Row) => 
     cols.splice(index, 1, dates("starts_on", "Inicio de vigencia"), dates("ends_on", "Fin de vigencia"));
     cols.push(dates("sale_date", "Fecha de emisión"));
   }
+  if (section === "liquidations") cols.push(dates("emission_until", "Última emisión"), dates("deposit_until", "Último depósito"));
   return cols;
 }
 export function exportFooter(section: string, rows: Row[], columns: ExportColumn<Row>[]) {

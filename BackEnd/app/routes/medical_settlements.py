@@ -84,14 +84,19 @@ async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_
 @router.post('/liquidations/{ident}/settle')
 def settle(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):
     m.global_only(user)
-    row=m.find(m.liquidation_scope(db,user),ident,True);r.require_current(row)
-    if row.kind!='seller' or row.status not in {'submitted','approved'}:raise HTTPException(409,'La liquidación no está enviada para revisión')
+    row=m.find(m.liquidation_scope(db,user),ident,True)
+    allowed = {'submitted','approved'} | ({'pending'} if row.legacy_id else set())
+    if row.kind!='seller' or row.status not in allowed:raise HTTPException(409,'La liquidación no está enviada para revisión')
     vouchers=db.query(m.Voucher).filter_by(liquidation_id=ident,active=True).with_for_update().all()
     deposits=sum((v.amount for v in vouchers if v.purpose in {'deposit','commission_offset'}),Decimal(0))
     if deposits!=row.deposit_required or not vouchers:raise HTTPException(422,'El voucher no coincide con las emisiones seleccionadas')
+    items=db.query(m.Issuance).join(m.Item,m.Item.issuance_id==m.Issuance.id).filter(m.Item.liquidation_id==ident).all()
+    if not items or any(e.status!='issued' for e in items):raise HTTPException(409,'Revisa las emisiones incluidas antes de aprobar')
     before=m.dump(row)
     for v in vouchers:
-        if not v.verified_at:v.verified_at=utc_now();v.verified_by=user.id
+        if not v.verified_at:
+            old=m.dump(v);v.verified_at=utc_now();v.verified_by=user.id
+            m.audit_change(db,request,user,'medical_voucher_verification',v.id,before=old,after={**m.dump(v),'reason':payload.reason},module='abissol_medical')
     row.status='paid'
     row.notes=(row.notes+'\nOficina Principal: '+payload.reason).strip()
     ids=db.query(m.Item.issuance_id).filter_by(liquidation_id=ident)

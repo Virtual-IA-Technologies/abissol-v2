@@ -15,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/side-dialog";
 
-import { PendingSettlements } from "./pending-settlements";
 import { VoucherPreview } from './voucher-preview';
 import type { SettlementDetail } from "./liquidation-detail";
 const EmissionForm=lazy(()=>import('./emission-form').then(m=>({default:m.EmissionForm})));
@@ -86,7 +85,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     const version = ++requestVersion.current;
     setLoading(true); setError("");
     try {
-      const params = { offset: page * 25, limit: 25, kind: liquidationKind, include_cancelled: history || undefined, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined };
+      const params = { offset: page * 25, limit: 25, kind: liquidationKind, include_cancelled: history || undefined, include_pending: liquidationKind === "seller" && !history || undefined, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined };
       if (refreshReferences) { referencesCache.current = null; referencesPending.current = null; }
       if (!referencesCache.current && !referencesPending.current) {
         const request = api.get<Lookup>("/medical/lookups", { params: { section } }).then(r => r.data).finally(() => { if (referencesPending.current === request) referencesPending.current = null; });
@@ -161,12 +160,20 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
   async function showVoucher(row: Row) {
     try { setVoucherDetail((await api.get<SettlementDetail>(`/medical/liquidations/${row.id}`)).data); } catch (e) { setError(errorText(e)); }
   }
+  const dateRange = (first: Value, last: Value) => {
+    const format = (value: Value) => value ? String(value).split("-").reverse().join("/") : "—";
+    return last && last !== first ? `${format(first)} → ${format(last)}` : format(first);
+  };
+  const period = (r: Row) => {
+    const month = (value: Value) => value ? new Intl.DateTimeFormat("es-PE", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(String(value) + "T00:00:00Z")) : "—";
+    return r.emission_until && String(r.emission_until).slice(0,7) !== String(r.emission_on).slice(0,7) ? `${month(r.emission_on)} → ${month(r.emission_until)}` : month(r.emission_on);
+  };
   const columns: Record<string, [string, (r: Row) => string][]> = {
     plans: [["Plan", r => `${r.code} · ${r.name}`], ["Precio", r => money(r.price)], ["Proveedor", r => money(r.provider_cost)], ["Vendedor", r => money(r.seller_commission)], ["Vigencia", r => `${r.validity_days} días`], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     network: [["Participante", r => String(r.display_name || userName(r.user_id))], ["Acceso al portal", r => r.user_id ? userName(r.user_id) : "Sin cuenta ABISSOL"], ["Roles de acceso", r => r.user_id ? (lookup.users.find(u => u.id === Number(r.user_id))?.roles || []).join(", ") || "Sin rol activo" : "Sin acceso al portal"], ["ID externo", r => String(r.external_user_id || "—")], ["Función", r => labels[String(r.kind)]], ["Origen", r => String(lookup.sources.find(s => s.id === r.source_id)?.name || r.source_id)], ["Responsable", r => r.manager_id ? profileName(r.manager_id) : "—"], ["Estado", r => r.active ? "Activo" : "Inactivo"]],
     emissions: [["Certificado", r => String(r.code)], ["Canal / emisor", r => `${r.external_source ? `Externa · ${r.external_source}` : "Interna · ABISSOL"} · ${profileName(r.emitter_id)}`], ["Titular", r => `${r.customer} · ${r.document_number}`], ["Plan", r => String(r.plan_name)], ["Registrada", r => formatLimaDateTime(String(r.created_at || ""))], ["Vigencia", r => `${r.starts_on} → ${r.ends_on}`], ["Importe", r => money(r.price)], ["Estado", r => `${labels[String(r.status)]} · ${labels[String(r.payment_status)]}`]],
     dispatches: [["Emisión", r => String(r.invoice_number || r.issuance_code || r.liquidation_code || (r.liquidation_id ? `Liquidación #${r.liquidation_id}` : "Envío general"))], ["Canal", r => labels[String(r.channel)]], ["Destinatario", r => String(r.recipient)], ["Estado", r => labels[String(r.status)] || String(r.status)], ["Intentos", r => String(r.attempts)], ["Detalle", r => String(r.error || "—")]],
-    liquidations: [["Número", r => String(r.code || `LIQ-${r.id}`)], ["Asegurado", r => String(r.insured_names || "—")], ["Responsable", r => profileName(r.responsible_id)], ["Registrada", r => formatLimaDateTime(String(r.created_at || ""))], ["Ventas", r => money(r.sales_total)], ["Estado", r => r.legacy_id&&r.status==="pending"&&Number(r.deposit_registered)>0?"Voucher presentado · Por revisar":r.status==="submitted"||r.status==="sent"?"Enviado":r.status==="paid"?"Liquidado":labels[String(r.status)] || String(r.status)]],
+    liquidations: [["Número / certificado", r => String(r.code || `LIQ-${r.id}`)], ["Asegurado", r => String(r.insured_names || "—")], ["Responsable", r => profileName(r.responsible_id)], ["Período de emisión", period], ["Fecha de emisión", r => dateRange(r.emission_on, r.emission_until)], ["Fecha de depósito", r => dateRange(r.deposit_on, r.deposit_until)], ["Ventas", r => money(r.sales_total)], ["Estado", r => r.row_type === "pending" ? "Pendiente" : r.status === "paid" ? "Liquidado" : r.status === "cancelled" ? "Anulado" : r.kind === "seller" && Number(r.deposit_registered) > 0 ? "Enviado" : labels[String(r.status)] || String(r.status)]],
     billing: [["Comprobante", r => String(r.full_number || `BOR-${r.id}`)], ["Tipo", r => labels[String(r.document_type)] || String(r.document_type)], ["Cliente", r => String(r.customer)], ["Documento", r => String(r.document_number)], ["Total", r => money(r.total)], ["Estado fiscal", r => `${r.fiscal_environment === "beta" ? "PRUEBA BETA · " : ""}${labels[String(r.sunat_status)] || String(r.sunat_status)}`], ["Estado", r => r.deleted_at ? "Archivado" : labels[String(r.status)] || String(r.status)]],
     reports: [["Plan", r => String(r.plan)], ["Emisiones", r => String(r.count)], ["Ventas", r => money(r.sales)], ["Por cobrar", r => money(r.pending)], ["Por liquidar", r => money(r.unliquidated)], ["Comisiones", r => money(r.commissions)], ["Vencen en 30 días", r => String(r.expiring)]],
   };
@@ -178,7 +185,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
       const exportData = section === "emissions" || section === "liquidations" ? [] as Row[] : [...data.items];
       if (section === "emissions" || section === "liquidations") {
         while (exportData.length < data.total) {
-          const response = await api.get<Listing>(`/medical/${section}`, { params: { offset: exportData.length, limit: 200, kind: liquidationKind, include_cancelled: history || undefined, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined } });
+          const response = await api.get<Listing>(`/medical/${section}`, { params: { offset: exportData.length, limit: 200, kind: liquidationKind, include_cancelled: history || undefined, include_pending: liquidationKind === "seller" && !history || undefined, state: section === "emissions" ? emissionState : undefined, search: serverQuery, starts_on: start || undefined, ends_on: end || undefined } });
           if (!response.data.items.length) break;
           exportData.push(...response.data.items);
         }
@@ -213,8 +220,10 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     if(section==="network"&&manager&&lookup.global_access)actions.push({label:"Editar",icon:Pencil,onSelect:()=>profileForm(r)});
     if(section==="dispatches"&&editor&&!r.legacy_id&&!["meta_daily_report","metafin_monthly","invoice_client","settlement_office"].includes(String(r.kind))&&r.status==="failed")actions.push({label:"Reintentar envío",icon:Send,onSelect:()=>setModal({title:"Reintentar envío",path:`/dispatches/${r.id}/retry`,fields:[],description:"Comprueba antes el proveedor: un nuevo envío puede duplicar el mensaje."})});
     if(section==="liquidations") {
+      if(r.row_type === "pending") return [{label:"Ver detalle",icon:Eye,onSelect:()=>setRecordPreview(r)}, ...(editor ? [{label:"Registrar liquidación",icon:Plus,onSelect:()=>create()}] : [])];
       actions[0]={label:"Detalle y conciliación",icon:Eye,onSelect:()=>void showDetail(r)};
       actions.unshift({label:"Ver voucher",icon:FileText,onSelect:()=>void showVoucher(r)});
+      if(manager && lookup.global_access && r.kind === "seller" && r.status !== "paid" && r.status !== "cancelled" && Number(r.deposit_registered) > 0) actions.push({label:"Aprobar y marcar Liquidado",icon:Wallet,onSelect:()=>setModal({title:"Aprobar liquidación · Oficina Principal",path:`/liquidations/${r.id}/settle`,fields:[reason],description:"Confirma que verificaste el voucher contra el banco. La liquidación pasará de Enviado a Liquidado."})});
       if(r.kind==="meta"&&r.status!=="cancelled") {
         actions.push({label:"Excel META",icon:Download,onSelect:()=>void download(`/liquidations/${r.id}/meta-file/xlsx`,`${r.code||r.id}.xlsx`)},{label:"Carta META",icon:FileText,onSelect:()=>void download(`/liquidations/${r.id}/meta-file/letter`,`carta-${r.code||r.id}.pdf`)});
         if(editor&&lookup.global_access)actions.push({label:"Enviar a META",icon:Send,onSelect:()=>setModal({title:"Enviar altas mensuales a META",path:`/liquidations/${r.id}/meta-send`,fields:[{name:"force",label:"Autorizar reenvío si ya existen intentos previos",type:"checkbox",optional:true}],description:"Se enviará un correo real con el Excel y la carta mensual. Comprueba la recepción antes de autorizar un reenvío."})});
@@ -249,13 +258,12 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
         {(start||end||query||search)&&<Button variant="ghost" size="sm" onClick={()=>{setStart("");setEnd("");setSearch("");setQuery("");setPage(0);}}>Limpiar</Button>}
         <Button className="ml-auto h-9" size="sm" variant="outline" disabled={busy||loading||!data.items.length} onClick={()=>void exportRows()}><Download className="size-4"/>Exportar</Button>
       </div>
-      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-muted/50"><tr>{columns[section].map(([name]) => <th className="whitespace-nowrap px-4 py-3 font-medium" key={name}>{name}</th>)}{section !== "reports" && <th className="px-4 py-3">Acciones</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={columns[section].length + 1} className="p-10 text-center text-muted-foreground">Cargando registros…</td></tr> : !visible.length ? <tr><td colSpan={columns[section].length + 1} className="p-12 text-center text-muted-foreground">No hay registros para mostrar.{editor && section !== "reports" && section !== "billing" ? " Usa la acción superior para comenzar." : ""}</td></tr> : visible.map((r, i) => <MedicalRow key={String(r.id || i)} actions={rowActions(r)}>{columns[section].map(([name, render]) => <td key={name} className="px-4 py-3">{render(r)}</td>)}{section !== "reports" && <td className="w-16 px-4 py-3"><div className="flex flex-wrap gap-2">
+      <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-muted/50"><tr>{columns[section].map(([name]) => <th className="whitespace-nowrap px-4 py-3 font-medium" key={name}>{name}</th>)}{section !== "reports" && <th className="px-4 py-3">Acciones</th>}</tr></thead><tbody>{loading ? <tr><td colSpan={columns[section].length + 1} className="p-10 text-center text-muted-foreground">Cargando registros…</td></tr> : !visible.length ? <tr><td colSpan={columns[section].length + 1} className="p-12 text-center text-muted-foreground">No hay registros para mostrar.{editor && section !== "reports" && section !== "billing" ? " Usa la acción superior para comenzar." : ""}</td></tr> : visible.map((r, i) => <MedicalRow key={String(r.id || i)} actions={rowActions(r)} onOpen={section === "liquidations" ? () => r.row_type === "pending" ? setRecordPreview(r) : void showDetail(r) : undefined}>{columns[section].map(([name, render]) => <td key={name} className="px-4 py-3">{render(r)}</td>)}{section !== "reports" && <td className="w-16 px-4 py-3"><div className="flex flex-wrap gap-2">
         <RowActionsMenu label={String(r.code || r.full_number || r.display_name || r.name || r.id || "registro")} actions={rowActions(r)} />
       </div></td>}</MedicalRow>)}</tbody></table></div>
       <footer className="flex items-center justify-between border-t p-4 text-sm text-muted-foreground"><span>{data.total} registros · {section === "plans" || section === "network" || section === "reports" ? "Listado completo" : `Página ${page + 1}`}</span>{!["plans", "network", "reports"].includes(section) && <div className="flex gap-2"><Button variant="outline" size="sm" disabled={!page || loading} onClick={() => setPage(p => p - 1)}>Anterior</Button><Button variant="outline" size="sm" disabled={(page + 1) * 25 >= data.total || loading} onClick={() => setPage(p => p + 1)}>Siguiente</Button></div>}</footer>
     </section>
     {data.sales_sum !== undefined && !loading && <p className="text-right text-sm font-semibold">Total del listado (sin anulados): {money(data.sales_sum)}</p>}
-    {section === "liquidations" && liquidationKind === "seller" && !history && <PendingSettlements refreshKey={data} />}
     {voucherDetail && <VoucherPreview detail={voucherDetail} close={()=>setVoucherDetail(null)}/>}
     {recordPreview && <Dialog open onOpenChange={open=>{if(!open)setRecordPreview(null);}}><DialogContent><DialogHeader><DialogTitle>{titles[section]} · Detalle</DialogTitle><DialogDescription>Consulta del registro seleccionado.</DialogDescription></DialogHeader><dl className="space-y-4">{columns[section].map(([label,render])=><div key={label}><dt className="text-sm text-muted-foreground">{label}</dt><dd className="break-words font-medium">{render(recordPreview)}</dd></div>)}</dl></DialogContent></Dialog>}
     {letterPreview && <Dialog open onOpenChange={open=>{if(!open)setLetterPreview(null);}}><DialogContent className="sm:max-w-5xl"><DialogHeader><DialogTitle>{letterPreview.code}</DialogTitle><DialogDescription>Documento del programa de asistencia.</DialogDescription></DialogHeader><iframe title="Documento del programa" src={letterPreview.url} className="h-[75vh] w-full rounded-lg border" /></DialogContent></Dialog>}
@@ -266,7 +274,7 @@ function MedicalSection({ section, embedded = false, liquidationKind, history = 
     {modal?.path === "/emissions" && <EmissionForm plans={lookup.plans.filter(p => p.active)} emitters={profileOptions()} globalAccess={lookup.global_access} close={() => setModal(null)} saved={async () => { setModal(null); setNotice("Emisión registrada correctamente."); await load(section!=="liquidations"); }} />}
     {modal && modal.path !== "/emissions" && modal.path !== "/liquidations" && <BusinessForm modal={modal} close={() => setModal(null)} saved={async result => { setModal(null); setNotice(["failed", "uncertain"].includes(String(result.status)) ? "Intento registrado; el proveedor no confirmó el envío. Revisa el detalle." : "Operación registrada correctamente."); await load(section!=="liquidations"); }} />}
     {modal?.path === "/liquidations" && (liquidationKind||"seller")==="seller" && <SellerSettlementForm profiles={profileOptions("responsible")} close={()=>setModal(null)} saved={async()=>{setModal(null);await load(false);}}/>}
-    {detail&&detail.kind==="seller"&&!detail.legacy_id&&["submitted","approved","paid"].includes(detail.status)?<SellerSettlementDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} manager={manager&&lookup.global_access}/>:detail&&<LiquidationDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} editor={editor} manager={manager&&lookup.global_access}/>}
+    {detail&&detail.kind==="seller"&&["pending","submitted","approved","paid"].includes(detail.status)?<SellerSettlementDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} manager={manager&&lookup.global_access}/>:detail&&<LiquidationDetail initial={detail} close={()=>setDetail(null)} changed={()=>load(false)} editor={editor} manager={manager&&lookup.global_access}/>}
     </Suspense>
     </>}
     </UnderlineTabs>
@@ -317,9 +325,9 @@ function EmissionPicker({ section, selected }: { section: string; selected?: Val
   return <span className="block space-y-2"><input type="hidden" name="issuance_id" value={value} /><SearchableSelect aria-label="Emisión seleccionada" options={options} value={value} onValueChange={setValue} onSearchChange={setSearch} searchPlaceholder="Buscar certificado o titular…" placeholder="Seleccionar emisión" />{error && <span role="alert" className="text-red-700">{error}</span>}</span>;
 }
 
-function MedicalRow({actions, children}: {actions?: RowAction[]; children: ReactNode}) {
+function MedicalRow({actions, children, onOpen}: {actions?: RowAction[]; children: ReactNode; onOpen?: () => void}) {
   const row = <tr className="border-t hover:bg-muted/30" tabIndex={actions ? 0 : undefined} title={actions ? "Doble clic para abrir · Clic derecho para opciones" : undefined}
-    onDoubleClick={event => {if (!(event.target as HTMLElement).closest('button,a,input,[role="menuitem"]')) actions?.[0]?.onSelect();}}
-    onKeyDown={event => {if (event.key === "Enter" && event.target === event.currentTarget) {event.preventDefault();actions?.[0]?.onSelect();}}}>{children}</tr>;
+    onDoubleClick={event => {if (!(event.target as HTMLElement).closest('button,a,input,[role="menuitem"]')) (onOpen || actions?.[0]?.onSelect)?.();}}
+    onKeyDown={event => {if (event.key === "Enter" && event.target === event.currentTarget) {event.preventDefault();(onOpen || actions?.[0]?.onSelect)?.();}}}>{children}</tr>;
   return actions ? <RecordContextMenu actions={actions}>{row}</RecordContextMenu> : row;
 }

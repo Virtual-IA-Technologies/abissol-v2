@@ -6,7 +6,7 @@ import {Input} from '@/components/ui/input';
 import {Textarea} from '@/components/ui/textarea';
 import {SearchableSelect} from '@/components/searchable-select';
 import {Dialog,DialogContent,DialogHeader,DialogTitle,DialogDescription} from '@/components/side-dialog';
-type Item={id:number;code:string;customer:string;sale:string;commission:string;deposit:string};
+type Item={sale_date?:string;id:number;code:string;customer:string;sale:string;commission:string;deposit:string};
 type Voucher={id:number;reference:string;amount:string;purpose:string;bank:string|null;account:string|null;paid_on:string;verified_at:string|null;filename:string;note:string|null};
 export type SettlementDetail={id:number;code:string;kind:string;legacy_id?:number|null;status:string;notes?:string;office_notification?:string;items:Item[];vouchers:Voucher[];deposit_required:string;deposit_registered:string;deposit_verified:string;balance_due:string;commission_paid:string;commission_offset:string;commission_due:string;pending_verification:string;commission_state:string};
 const money=(value:string)=>new Intl.NumberFormat('es-PE',{style:'currency',currency:'PEN'}).format(Number(value));

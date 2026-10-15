@@ -69,6 +69,55 @@ class SettlementTests(unittest.TestCase):
         rows = self.client.get(API+'/seller-pending', headers=self.headers).json()['items']
         self.assertEqual([row['id'] for row in rows], [pending['id']])
 
+    def test_unified_list_dates_pagination_and_pending_scope(self):
+        from app.models.medical import MedicalIssuance
+        from datetime import date
+        self.setup_sale();self.voucher(55)
+        pending=self.issuance(document_number='87654321')
+        cancelled=self.issuance(document_number='12348765')
+        with self.sessions() as db:
+            db.get(MedicalIssuance,cancelled['id']).status='cancelled'
+            db.get(MedicalIssuance,pending['id']).sale_date=date(2026,8,14)
+            db.get(MedicalLiquidation,self.liq['id']).starts_on=date(2026,1,1)
+            db.commit()
+        listing=self.client.get(API+'/liquidations?kind=seller&include_pending=true',headers=self.headers).json()
+        self.assertEqual(listing['total'],2)
+        self.assertEqual(Decimal(listing['sales_sum']),110)
+        virtual=next(row for row in listing['items'] if row.get('row_type')=='pending')
+        self.assertEqual(virtual['issuance_id'],pending['id'])
+        self.assertEqual(virtual['emission_on'],'2026-08-14')
+        self.assertIsNone(virtual['deposit_on'])
+        actual=next(row for row in listing['items'] if row['id']==self.liq['id'])
+        self.assertEqual(actual['emission_on'],self.day)
+        self.assertEqual(actual['deposit_on'],self.day)
+        one=self.client.get(API+'/liquidations?kind=seller&include_pending=true&limit=1&offset=1',headers=self.headers).json()
+        self.assertEqual(len(one['items']),1);self.assertEqual(one['total'],2)
+        self.assertEqual(Decimal(one['sales_sum']),110)
+        filtered=self.client.get(API+'/liquidations?kind=seller&include_pending=true&starts_on=2026-08-01&ends_on=2026-08-31',headers=self.headers).json()
+        self.assertEqual([row['id'] for row in filtered['items']],[-pending['id']])
+        _,reader=self.login('reader')
+        with self.sessions() as db:
+            menu=db.query(Menu).filter_by(slug='medical-liquidations').one()
+            db.add(AccessGrant(usuario_id=self.reader_id,menu_id=menu.id,access_level='lector'));db.commit()
+        self.assertEqual(self.client.get(API+'/liquidations?kind=seller&include_pending=true',headers=reader).json()['total'],0)
+
+    def test_office_approves_imported_vouchers_explicitly(self):
+        from app.models.medical import MedicalIssuance
+        self.setup_sale();self.voucher(55)
+        with self.sessions() as db:
+            row=db.get(MedicalLiquidation,self.liq['id']);row.legacy_id=991;row.status='pending';db.commit()
+        _,reader=self.login('reader')
+        with self.sessions() as db:
+            menu=db.query(Menu).filter_by(slug='medical-liquidations').one()
+            db.add(AccessGrant(usuario_id=self.reader_id,menu_id=menu.id,access_level='gestor'));db.commit()
+        self.post(f'/liquidations/{self.liq["id"]}/settle',{'reason':'Revisado contra banco'},403,reader)
+        self.post(f'/liquidations/{self.liq["id"]}/settle',{'reason':'Revisado contra banco'})
+        self.assertEqual(self.detail()['status'],'paid')
+        self.post(f'/liquidations/{self.liq["id"]}/settle',{'reason':'Revisado contra banco'},409)
+        with self.sessions() as db:
+            self.assertEqual(db.query(MedicalIssuance).one().payment_status,'settled')
+            self.assertIsNotNone(db.query(MedicalVoucher).one().verified_at)
+
     def test_selected_voucher_submit_email_and_office_close(self):
         from app.models.medical import MedicalBusinessSetting,MedicalDispatch,MedicalIssuance
         from app.models.settings import SmtpSetting

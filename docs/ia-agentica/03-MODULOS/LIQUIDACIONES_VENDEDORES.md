@@ -78,3 +78,7 @@ compensaciones, comisiones posteriores al cierre, constancia, permisos, históri
 y consultas constantes. La prueba de navegador local simula movimientos: no genera
 depósitos, ventas ni mensajes reales. Verificación productiva de consulta y salud
 tras publicar; nunca se concilia dinero real como parte de las pruebas.
+
+## Actualización 15/10/2026
+
+Por solicitud expresa, Oficina Principal puede aprobar y cerrar también liquidaciones históricas de vendedor con voucher completo mediante /settle y motivo auditado. La edición histórica sigue bloqueada. [Lista unificada, períodos y fechas](LISTA_Y_APROBACION_LIQUIDACIONES_20261015.md).

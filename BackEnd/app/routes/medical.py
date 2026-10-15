@@ -13,7 +13,7 @@ import pymupdf as fitz
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import FileResponse, Response, HTMLResponse, JSONResponse
-from sqlalchemy import false, func, or_, case
+from sqlalchemy import false, func, or_, case, literal
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -503,7 +503,7 @@ def liquidation_amounts(emission, kind):
 @router.get("/liquidations")
 def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), kind: str | None = None,
                  search: str = Query("", max_length=180), status: str | None = None, starts_on: date | None = None, ends_on: date | None = None,
-                 db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations")), include_cancelled: bool = False):
+                 db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations")), include_cancelled: bool = False, include_pending: bool = False):
     query = liquidation_scope(db, user)
     if not include_cancelled and not status: query = query.filter(Liquidation.status != "cancelled")
     if kind:
@@ -513,11 +513,35 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
     if search:
         matching_insured = db.query(Item.id).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == Liquidation.id, or_(Issuance.customer.contains(search), Issuance.code.contains(search))).exists()
         query = query.filter(or_(Liquidation.code.contains(search), Liquidation.notes.contains(search), matching_insured))
-    if starts_on: query = query.filter(Liquidation.ends_on >= starts_on)
-    if ends_on: query = query.filter(Liquidation.starts_on <= ends_on)
-    result=page(query, offset, limit)
-    result['sales_sum'] = str(query.filter(Liquidation.status != 'cancelled').with_entities(func.coalesce(func.sum(Liquidation.sales_total), 0)).scalar())
-    ids=[r['id'] for r in result['items']]
+    if kind == 'seller':
+        emission_dates = db.query(Item.id).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == Liquidation.id)
+        if starts_on: emission_dates = emission_dates.filter(Issuance.sale_date >= starts_on)
+        if ends_on: emission_dates = emission_dates.filter(Issuance.sale_date <= ends_on)
+        if starts_on or ends_on: query = query.filter(emission_dates.exists())
+    else:
+        if starts_on: query = query.filter(Liquidation.ends_on >= starts_on)
+        if ends_on: query = query.filter(Liquidation.starts_on <= ends_on)
+    sales_sum = query.filter(Liquidation.status != 'cancelled').with_entities(func.coalesce(func.sum(Liquidation.sales_total), 0)).scalar()
+    pending_rows = []
+    if include_pending and kind == 'seller':
+        used = db.query(Item.issuance_id).filter(Item.active_key.like('seller:%'))
+        pending = scope(db, user).filter(Issuance.status == 'issued', Issuance.test_batch.is_(None), Issuance.payment_status.in_(['pending', 'collected_by_seller']), ~Issuance.id.in_(used.scalar_subquery()))
+        pending = filtered(pending, search, starts_on, ends_on)
+        if status and status != 'pending': pending = pending.filter(false())
+        sales_sum += pending.with_entities(func.coalesce(func.sum(Issuance.price), 0)).scalar()
+        combined = query.with_entities(Liquidation.id.label('id'), literal('liquidation').label('row_type'), Liquidation.created_at.label('created_at')).union_all(pending.with_entities(Issuance.id, literal('pending'), Issuance.created_at)).subquery()
+        selected = db.query(combined).order_by(combined.c.created_at.desc(), combined.c.id.desc()).offset(offset).limit(limit).all()
+        ids = [row.id for row in selected if row.row_type == 'liquidation']
+        pending_ids = [row.id for row in selected if row.row_type == 'pending']
+        result = {'items': [dump(row) for row in query.filter(Liquidation.id.in_(ids)).all()], 'total': db.query(combined).count()}
+        for e in pending.filter(Issuance.id.in_(pending_ids)).all():
+            pending_rows.append({'id': -e.id, 'issuance_id': e.id, 'row_type': 'pending', 'code': e.code, 'kind': 'seller', 'insured_names': e.customer, 'document_number': e.document_number, 'responsible_id': e.responsible_id, 'sales_total': str(e.price), 'status': 'pending', 'emission_on': e.sale_date.isoformat(), 'emission_until': e.sale_date.isoformat(), 'deposit_on': None, 'deposit_until': None})
+    else:
+        result = page(query, offset, limit)
+        ids = [row['id'] for row in result['items']]
+    result['sales_sum'] = str(sales_sum)
+    dates = {row.liquidation_id: row for row in db.query(Item.liquidation_id, func.min(Issuance.sale_date).label('first'), func.max(Issuance.sale_date).label('last')).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id.in_(ids)).group_by(Item.liquidation_id)} if ids else {}
+    deposits = {row.liquidation_id: row for row in db.query(Voucher.liquidation_id, func.min(Voucher.paid_on).label('first'), func.max(Voucher.paid_on).label('last')).filter(Voucher.liquidation_id.in_(ids), Voucher.active.is_(True), Voucher.purpose == 'deposit').group_by(Voucher.liquidation_id)} if ids else {}
     insured = {}
     for liquidation_id, customer in db.query(Item.liquidation_id, Issuance.customer).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id.in_(ids)).order_by(Item.id) if ids else []:
         names = insured.setdefault(liquidation_id, [])
@@ -526,8 +550,15 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
     from types import SimpleNamespace
     for item in result['items']:
         item['insured_names'] = ' · '.join(insured.get(item['id'], []))
+        for prefix, values in [('emission', dates), ('deposit', deposits)]:
+            bounds = values.get(item['id'])
+            item[prefix + '_on'] = bounds.first.isoformat() if bounds else None
+            item[prefix + '_until'] = bounds.last.isoformat() if bounds else None
         row=SimpleNamespace(**{**item,'deposit_required':Decimal(item['deposit_required']),'commission_total':Decimal(item['commission_total'])})
         item.update(reconciliation.balance(row,totals.get(item['id'],{})))
+    if include_pending and kind == 'seller':
+        indexed = {('pending' if row.get('row_type') == 'pending' else 'liquidation', abs(row['id'])): row for row in [*result['items'], *pending_rows]}
+        result['items'] = [indexed[(row.row_type, row.id)] for row in selected]
     return result
 
 
@@ -570,7 +601,7 @@ def build_liquidation(db, user, payload, eligible=None):
 def liquidation_detail(ident: int, db: Session = Depends(get_db), user=Depends(require_access("medical-liquidations"))):
     row = find(liquidation_scope(db, user), ident)
     result = dump(row)
-    result["items"] = [{**dump(i), "code": e.code, "customer": e.customer, "document_number": e.document_number, "plan_name": e.plan_name} for i, e in db.query(Item, Issuance).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == ident)]
+    result["items"] = [{**dump(i), "code": e.code, "customer": e.customer, "document_number": e.document_number, "plan_name": e.plan_name, "sale_date": e.sale_date.isoformat()} for i, e in db.query(Item, Issuance).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == ident)]
     result["vouchers"] = [{k: v for k, v in dump(i).items() if k not in {"storage_key", "digest", "active_digest", "active_reference"}} for i in db.query(Voucher).filter_by(liquidation_id=ident, active=True)]
     values={}
     for voucher in result['vouchers']:
