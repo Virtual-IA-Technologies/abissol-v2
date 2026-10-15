@@ -33,6 +33,21 @@ class SettlementTests(unittest.TestCase):
     def verify(self,voucher,status=200,headers=None):return self.post(f'/vouchers/{voucher["id"]}/verify',{'reason':'Verificado contra banco'},status,headers)
     def detail(self):return self.client.get(API+f'/liquidations/{self.liq["id"]}',headers=self.headers).json()
 
+    def test_list_insured_names_and_search_respect_scope(self):
+        self.setup_sale()
+        customer=self.detail()['items'][0]['customer']
+        response=self.client.get(API+'/liquidations',params={'search':customer},headers=self.headers)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['items'][0]['insured_names'],customer)
+        self.assertEqual(response.json()['total'],1)
+        _,reader=self.login('reader')
+        with self.sessions() as db:
+            menu=db.query(Menu).filter_by(slug='medical-liquidations').one()
+            db.add(AccessGrant(usuario_id=self.reader_id,menu_id=menu.id,access_level='lector'));db.commit()
+        response=self.client.get(API+'/liquidations',params={'search':customer},headers=reader)
+        self.assertEqual(response.status_code,200,response.text)
+        self.assertEqual(response.json()['items'],[])
+
     def test_selected_voucher_submit_email_and_office_close(self):
         from app.models.medical import MedicalBusinessSetting,MedicalDispatch,MedicalIssuance
         from app.models.settings import SmtpSetting

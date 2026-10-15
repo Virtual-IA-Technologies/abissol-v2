@@ -507,14 +507,21 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
         if kind not in {"seller", "meta", "platform"}: raise HTTPException(422, "Tipo de liquidación inválido")
         query = query.filter(Liquidation.kind == kind)
     if status: query = query.filter(Liquidation.status == status)
-    if search: query = query.filter(or_(Liquidation.code.contains(search), Liquidation.notes.contains(search)))
+    if search:
+        matching_insured = db.query(Item.id).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == Liquidation.id, or_(Issuance.customer.contains(search), Issuance.code.contains(search))).exists()
+        query = query.filter(or_(Liquidation.code.contains(search), Liquidation.notes.contains(search), matching_insured))
     if starts_on: query = query.filter(Liquidation.ends_on >= starts_on)
     if ends_on: query = query.filter(Liquidation.starts_on <= ends_on)
     result=page(query, offset, limit)
     ids=[r['id'] for r in result['items']]
+    insured = {}
+    for liquidation_id, customer in db.query(Item.liquidation_id, Issuance.customer).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id.in_(ids)).order_by(Item.id) if ids else []:
+        names = insured.setdefault(liquidation_id, [])
+        if customer not in names: names.append(customer)
     totals={r.liquidation_id:dict(r._mapping) for r in db.query(Voucher.liquidation_id,*reconciliation.aggregate()).filter(Voucher.liquidation_id.in_(ids),Voucher.active.is_(True)).group_by(Voucher.liquidation_id)} if ids else {}
     from types import SimpleNamespace
     for item in result['items']:
+        item['insured_names'] = ' · '.join(insured.get(item['id'], []))
         row=SimpleNamespace(**{**item,'deposit_required':Decimal(item['deposit_required']),'commission_total':Decimal(item['commission_total'])})
         item.update(reconciliation.balance(row,totals.get(item['id'],{})))
     return result
