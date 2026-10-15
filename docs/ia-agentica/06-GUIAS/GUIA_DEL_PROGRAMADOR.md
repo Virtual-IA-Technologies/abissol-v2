@@ -21,3 +21,11 @@ Este proyecto local usa exclusivamente `127.0.0.1 / abissol_v2_local`.
 
 Pruebas: `python -m unittest discover -s tests -v`. Esquema: `python -m alembic check`.
 Frontend: `npm run build`. No es necesario encender servicios externos para estas pruebas.
+
+## Chat de Sistemas
+
+Nuevo: migración `0017_support_chat_presence`, `SUPPORT_CHAT_URL` y `SUPPORT_CHAT_TOKEN`
+privados en backend. Ver [contrato y activación](../03-MODULOS/CHAT_SISTEMAS.md).
+Cada ambiente necesita conector exclusivo: no dirigir el publicador local al
+conector productivo. Verificación aislada: `python -m unittest tests.test_support_chat -v`.
+No añade dependencias ni modifica los canales de correo/WhatsApp ni OTP.

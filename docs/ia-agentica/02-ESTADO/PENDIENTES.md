@@ -30,3 +30,12 @@ No activar módulos del origen ni conectar bases anteriores por similitud de nom
 ## 2026-10-07 05:30 America/Lima · modo de trabajo obligatorio
 
 Incorporado íntegramente el texto proporcionado por el usuario en 06-GUIAS/MODO_DE_TRABAJO.md; AGENTS.md exige leerlo y aplicarlo en todas las tareas futuras del proyecto. Índice actualizado; cambios limitados a instrucciones y documentación. Se conserva el trabajo previo y el aislamiento del proyecto. Validación: igualdad de contenido con el adjunto, 15 secciones y enlace obligatorio correcto. Sin cambios funcionales, commit, push ni publicación.
+
+## Activación de chat ABISSOL → Virtual IA — 14/10/2026
+
+Implementación local lista. Pendientes: autorización expresa de publicación,
+conector exclusivo ABISSOL con cliente/departamento verificados, credencial propia
+en backend productivo y migración 0017 con respaldo. Validar directorios en ambos
+sitios, etiqueta ABISSOL y presencia/caducidad reales sin enviar mensajes no autorizados.
+MariaDB local no está escuchando; no se aplicó la migración en esta sesión.
+Ver 03-MODULOS/CHAT_SISTEMAS.md. Los cambios previos ajenos se conservaron.

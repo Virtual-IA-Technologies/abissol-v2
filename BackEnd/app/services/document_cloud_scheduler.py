@@ -28,6 +28,8 @@ async def loop():
 
 @asynccontextmanager
 async def lifespan(app):
+    from .support_chat import directory_loop
+    support_task = asyncio.create_task(directory_loop())
     enabled=os.getenv('DOCUMENT_CLOUD_SCHEDULER','true').lower()=='true'
     task=asyncio.create_task(loop()) if enabled else None
     trash_task=asyncio.create_task(trash_loop())
@@ -35,6 +37,8 @@ async def lifespan(app):
     recover_interrupted()
     extraction_task=asyncio.create_task(extraction_loop())
     yield
+    support_task.cancel()
+    with suppress(asyncio.CancelledError):await support_task
     extraction_task.cancel()
     with suppress(asyncio.CancelledError):await extraction_task
     trash_task.cancel()

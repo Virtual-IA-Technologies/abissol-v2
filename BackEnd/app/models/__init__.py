@@ -3,6 +3,7 @@ from .rol import Rol
 from .user import Usuario, UsuarioRol, usuario_roles
 from .calendar import CalendarEvent, CalendarLabel, CalendarReminder, calendar_event_assignees, calendar_event_labels
 from .device_session import DeviceSession
+from .support_chat import SupportChatPresence
 from .wolverine import AccessGrant, ImpersonationSession, LoginAttempt, Menu
 from .password_reset import PasswordResetToken
 from .audit import AuditLog

@@ -11,6 +11,20 @@ muestra los requisitos de la clave y permite ver u ocultar ambos campos.
 La cabecera del menú muestra el símbolo oficial y el nombre ABISSOL; al pulsarla
 vuelves al panel principal.
 
+## Chat con Sistemas
+
+Una vez activado el canal, pulsa **Chat** en la cabecera. En **Sistemas · Virtual IA**
+elige **Soporte Sistemas** para atención general o un integrante para una conversación
+personal. Puedes enviar texto y adjuntar o pegar imágenes; Capturar solicita permiso
+del navegador. Los números indican mensajes sin leer y el historial permite cargar
+mensajes anteriores. Cada envío identifica tu usuario de ABISSOL ante Virtual IA.
+
+Los estados se actualizan automáticamente. «Sin actualizar» indica que no se pudo
+consultar el estado; puedes reintentar. Puedes escribir aunque Sistemas figure
+desconectado. El chat se oculta durante la impersonación: vuelve a tu cuenta para
+conversar. La presencia no registra jornada laboral. Esta función está preparada
+localmente; falta activar el conector y publicarla en el piloto.
+
 Desde el menú puedes administrar usuarios, roles y accesos, revisar auditoría,
 organizar calendario y notificaciones, y trabajar con documentos. Las opciones
 disponibles dependen de tus permisos. Configuración permite cambiar apariencia

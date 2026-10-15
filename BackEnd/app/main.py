@@ -77,6 +77,8 @@ def health_ready():
 PREFIX = "/abissol/api/v1"
 
 app.include_router(auth.router, prefix=PREFIX, tags=["ABISSOL · Sesiones"])
+from .routes import support_chat
+app.include_router(support_chat.router, prefix=PREFIX)
 from .routes import medical_workspaces
 from .routes import medical_settlements
 from .routes import medical_testing

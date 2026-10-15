@@ -7,6 +7,7 @@
 - [Bitácora](05-BITACORA/2026-10.md).
 - [Guía de ejecución](06-GUIAS/GUIA_DEL_PROGRAMADOR.md).
 - [Manual básico](MANUAL_DE_USO.md).
+- [Chat y Sistemas de Virtual IA](03-MODULOS/CHAT_SISTEMAS.md).
 
 Solo MANUAL_DE_USO.md es documentación general. Estado y bitácora son internos;
 arquitectura y guía son técnicos. El inicializador sincroniza estos documentos

@@ -309,3 +309,15 @@ Repositorio vigente: `Virtual-IA-Technologies/abissol-v2`, solicitado por el usu
 ## 2026-10-07 05:30 America/Lima · modo de trabajo obligatorio
 
 Incorporado íntegramente el texto proporcionado por el usuario en 06-GUIAS/MODO_DE_TRABAJO.md; AGENTS.md exige leerlo y aplicarlo en todas las tareas futuras del proyecto. Índice actualizado; cambios limitados a instrucciones y documentación. Se conserva el trabajo previo y el aislamiento del proyecto. Validación: igualdad de contenido con el adjunto, 15 secciones y enlace obligatorio correcto. Sin cambios funcionales, commit, push ni publicación.
+
+## Chat con Sistemas — 14/10/2026, implementación local
+
+Preparado chat en cabecera con canal general y personales de Virtual IA, historial,
+no leídos y capturas. Proxy conserva identidad backend y secreto del conector;
+rechaza impersonación/cambio de clave pendiente. Presencia por sesión (migración
+0017), pulsos visibles cada 20 s y publicador autónomo cada 5 s; directorio y
+mensajes abiertos se consultan cada 3 s. Conector exclusivo con etiqueta ABISSOL
+pendiente de configurar. Ocho pruebas focalizadas y TypeScript aprobados.
+MariaDB local detenida: migración/upsert real pendientes. No se modificaron Capital
+ni Virtual IA; no hubo mensajes reales, commit, push ni despliegue.
+[Contrato y activación](../03-MODULOS/CHAT_SISTEMAS.md).
