@@ -7,6 +7,7 @@ import { NavUser } from "@/components/nav-menus/nav-user";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
 import { usePlatformSettings } from "@/context/PlatformSettingsContext";
+import { SystemsChat } from "@/components/systems-chat";
 import { avatarUrl } from "@/lib/avatar";
 
 export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
@@ -28,7 +29,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
         </Link>
       </SidebarHeader>
       <SidebarContent className="overflow-hidden"><ScrollArea className="sidebar-navigation-scroll h-full py-2"><NavMain items={menus} /></ScrollArea></SidebarContent>
-      {user && <SidebarFooter className="border-t border-sidebar-border p-3"><NavUser user={{ name: `${user.nombre} ${user.apellido}`, email: user.correo, avatar: avatarUrl(user.avatar_file) }} /></SidebarFooter>}
+      {user && <SidebarFooter className="border-t border-sidebar-border p-3"><SystemsChat sidebar /><NavUser user={{ name: `${user.nombre} ${user.apellido}`, email: user.correo, avatar: avatarUrl(user.avatar_file) }} /></SidebarFooter>}
     </Sidebar>
   );
 }

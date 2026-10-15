@@ -17,6 +17,7 @@ import type { MenuNode } from "@/features/wolverine/types";
 import { useNotifications } from "@/features/notifications/notification-context";
 import { avatarUrl } from "@/lib/avatar";
 import { ThemeToggle } from "./theme-toggle";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { SystemsChat } from "./systems-chat";
 
 function initials(name: string) {
@@ -35,6 +36,7 @@ function activeTrail(items: MenuNode[], pathname: string, parents: MenuNode[] = 
 }
 
 export function SiteHeader({ compactNavigation = false, topNavigation = false }: { compactNavigation?: boolean; topNavigation?: boolean }) {
+  const isMobile = useIsMobile();
   const location = useLocation();
   const navigate = useNavigate();
   const { user, menus, impersonation, leaveImpersonation, logout, can } = useAuth();
@@ -85,7 +87,7 @@ export function SiteHeader({ compactNavigation = false, topNavigation = false }:
           </div>
           <GlobalSearch open={searchOpen} onOpenChange={setSearchOpen} />
           <div className="ml-auto flex shrink-0 items-center gap-1">
-            <SystemsChat />
+            {compactNavigation && !isMobile && <SystemsChat />}
             {can("calendario") && <CalendarQuickPopover />}
             {can("notificaciones") && <button type="button" onClick={() => navigate("/plataforma/sistema/notificaciones")} aria-label={`Abrir notificaciones${unread ? `, ${unread} sin leer` : ""}`} title="Notificaciones" className="relative flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"><Bell className="size-4" />{unread > 0 && <span className="absolute right-0.5 top-0.5 flex min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-semibold leading-4 text-white">{unread > 99 ? "99+" : unread}</span>}</button>}
             <button type="button" data-global-search-trigger aria-expanded={searchOpen} onClick={() => setSearchOpen(true)} aria-label="Abrir búsqueda global" className="flex size-9 items-center justify-center rounded-md text-muted-foreground hover:bg-muted md:hidden"><Search className="size-4" /></button>

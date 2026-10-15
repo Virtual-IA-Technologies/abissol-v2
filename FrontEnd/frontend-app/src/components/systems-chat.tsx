@@ -6,19 +6,20 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
+import { SidebarMenuButton } from '@/components/ui/sidebar';
 
 const SupportChatPane = lazy(() => import('./support-chat-pane').then(module => ({ default: module.SupportChatPane })));
 type Contact = { id: number; name: string; state?: string; avatar_url?: string | null; unread: number };
 type Directory = { operators: Contact[]; general_unread: number; unread: number };
 type Target = { base: string; title: string; personal: boolean };
 
-export function SystemsChat() {
+export function SystemsChat({ sidebar = false }: { sidebar?: boolean }) {
   const { user, impersonation } = useAuth();
   if (!user || user.requiere_cambio_clave || impersonation?.active) return null;
-  return <SystemsChatSession key={user.id} />;
+  return <SystemsChatSession key={user.id} sidebar={sidebar} />;
 }
 
-function SystemsChatSession() {
+function SystemsChatSession({ sidebar }: { sidebar: boolean }) {
   const [open, setOpen] = useState(false);
   const [directory, setDirectory] = useState<Directory | null>(null);
   const [error, setError] = useState('');
@@ -89,8 +90,8 @@ function SystemsChatSession() {
 
   return <>
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild><Button variant="ghost" size="sm" aria-label={`Chat · Sistemas${directory?.unread ? `, ${directory.unread} sin leer` : ''}`} title="Chat · Sistemas"><MessageCircle className="size-4" /><span className="hidden sm:inline">Chat</span>{badge(directory?.unread || 0)}</Button></PopoverTrigger>
-      <PopoverContent align="end" className="w-[min(340px,calc(100vw-2rem))] p-2">
+      <PopoverTrigger asChild>{sidebar ? <SidebarMenuButton tooltip="Soporte" aria-label={`Soporte${directory?.unread ? `, ${directory.unread} sin leer` : ''}`} className="h-9"><MessageCircle className="size-4" /><span>Soporte</span>{badge(directory?.unread || 0)}</SidebarMenuButton> : <Button variant="ghost" size="sm" aria-label={`Soporte${directory?.unread ? `, ${directory.unread} sin leer` : ''}`} title="Soporte"><MessageCircle className="size-4" /><span className="hidden sm:inline">Soporte</span>{badge(directory?.unread || 0)}</Button>}</PopoverTrigger>
+      <PopoverContent side={sidebar ? "right" : "bottom"} align="end" sideOffset={8} className="w-[min(340px,calc(100vw-2rem))] p-2">
         <p className="px-2 py-1 text-sm font-semibold">Sistemas · Virtual IA</p>
         <Input aria-label="Buscar en Sistemas" placeholder="Buscar integrante…" value={search} onChange={event => setSearch(event.target.value)} />
         {error && <p role="alert" className="p-2 text-xs text-destructive">{error} <button type="button" className="underline" onClick={() => void refresh()}>Reintentar</button></p>}
