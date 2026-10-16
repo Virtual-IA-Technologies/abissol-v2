@@ -105,6 +105,30 @@ def settle(ident:int,payload:SettlementApprovalInput,request:Request,db:Session=
     db.query(m.Issuance).filter(m.Issuance.id.in_(ids.scalar_subquery())).update({'payment_status':'settled'},synchronize_session=False)
     return m.save(db,request,user,row,before)
 
+@router.post('/liquidations/{ident}/reopen')
+def reopen(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):
+    m.global_only(user)
+    row=m.find(m.liquidation_scope(db,user),ident,True)
+    r.require_current(row)
+    if row.kind!='seller' or row.status!='paid':raise HTTPException(409,'Solo se puede revertir una liquidación de vendedor liquidada')
+    reason=payload.reason.strip()
+    if len(reason)<5:raise HTTPException(422,'Describe el motivo de la reversión')
+    before=m.dump(row)
+    vouchers=db.query(m.Voucher).filter_by(liquidation_id=ident,active=True).with_for_update().all()
+    for v in vouchers:
+        if v.purpose in {'deposit','commission_offset'} and v.verified_at:
+            old=m.dump(v);v.verified_at=None;v.verified_by=None
+            m.audit_change(db,request,user,'medical_voucher_reopen',v.id,before=old,after={**m.dump(v),'reason':reason},module='abissol_medical')
+    entries=db.query(m.Issuance,m.Item.deposit).join(m.Item,m.Item.issuance_id==m.Issuance.id).filter(m.Item.liquidation_id==ident).with_for_update().all()
+    for entry,deposit in entries:
+        if entry.payment_status=='settled':
+            old=m.dump(entry)
+            entry.payment_status='collected_by_seller' if deposit>0 else 'paid_to_abissol'
+            m.audit_change(db,request,user,'medical_issuance_reopen',entry.id,before=old,after=m.dump(entry),module='abissol_medical')
+    row.status='submitted'
+    row.notes=(row.notes+'\nReversión de Oficina Principal: '+reason).strip()
+    return m.save(db,request,user,row,before)
+
 @router.post('/vouchers/{ident}/verify')
 def verify(ident:int,payload:ReasonInput,request:Request,db:Session=Depends(get_db),user=Depends(require_access('medical-liquidations','gestor'))):
     m.global_only(user)

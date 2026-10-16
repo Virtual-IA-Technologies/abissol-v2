@@ -15,3 +15,19 @@ conserva su resultado y nunca repite un intento existente, incluso incierto.
 Selección: vendedores no cancelados, sin pruebas y con voucher activo disponible.
 Validación de formato, destinatarios, adjunto y protección de duplicados en
 la prueba existente de envío de liquidaciones, usando SMTP simulado.
+
+## Reversión de liquidación — 16/10/2026
+
+Oficina Principal y administradores (rol Administrador o superusuario y permiso
+gestor de Liquidaciones) pueden usar «Revertir a Enviado» desde el menú o detalle.
+POST /medical/liquidations/{id}/reopen exige motivo y una liquidación nativa de
+vendedor en estado paid. Devuelve submitted, retira la conciliación de depósitos
+y compensaciones, y devuelve las emisiones liquidadas al estado de cobro según
+el depósito de su partida. Conserva archivos, pagos de comisión y correos.
+Audita voucher, emisión y liquidación en una sola transacción. Los históricos
+permanecen de consulta. Vendedores no pueden aprobar ni revertir, incluso con
+un permiso gestor individual sin rol administrativo. Prueba de ida y vuelta,
+rechazo de doble reversión y permisos verificados con SQLite y SMTP simulado.
+
+La liquidación 000027 estuvo incluida en los diez correos del formato nuevo
+(intento 108, enviado); la reversión no duplica ese envío.

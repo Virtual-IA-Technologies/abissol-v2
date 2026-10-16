@@ -169,6 +169,25 @@ class SettlementTests(unittest.TestCase):
             self.assertEqual(db.get(MedicalIssuance,sale['id']).payment_status,'settled')
             self.assertIsNotNone(db.query(MedicalVoucher).one().verified_at)
             self.assertEqual(db.query(MedicalDispatch).filter_by(kind='settlement_office').count(),1)
+        with self.sessions() as db:
+            menu=db.query(Menu).filter_by(slug='medical-liquidations').one()
+            db.add(AccessGrant(usuario_id=self.reader_id,menu_id=menu.id,access_level='gestor'))
+            db.get(MedicalProfile,self.profile_id).user_id=self.reader_id
+            db.commit()
+        path=f'/liquidations/{result["id"]}/reopen'
+        response=self.client.post(API+path,json={'reason':'Corrección de prueba'},headers=reader)
+        self.assertEqual(response.status_code,403)
+        self.post(path,{'reason':'Corrección de prueba'})
+        self.post(path,{'reason':'Corrección de prueba'},409)
+        with self.sessions() as db:
+            self.assertEqual(db.get(MedicalLiquidation,result['id']).status,'submitted')
+            self.assertEqual(db.get(MedicalIssuance,sale['id']).payment_status,'collected_by_seller')
+            self.assertIsNone(db.query(MedicalVoucher).one().verified_at)
+            self.assertIsNone(db.query(MedicalVoucher).one().verified_by)
+            self.assertEqual(db.query(MedicalDispatch).filter_by(kind='settlement_office').count(),1)
+        response=self.client.post(API+f'/liquidations/{result["id"]}/settle',json={},headers=reader)
+        self.assertEqual(response.status_code,403)
+        self.post(f'/liquidations/{result["id"]}/settle',{})
         from app.models.legacy import MedicalBillingConfiguration
         from app.utils.secrets import encrypt_secret
         with self.sessions() as db:
