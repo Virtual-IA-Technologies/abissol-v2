@@ -500,6 +500,15 @@ def liquidation_amounts(emission, kind):
     return commission, deposit
 
 
+def liquidation_month_search(search):
+    """Match the Spanish month/year displayed in the emission period column."""
+    months=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
+    match=re.fullmatch(r'('+'|'.join(months)+r')(?:\s+(?:de\s+)?(\d{4}))?',search.strip().lower())
+    if not match:return None
+    condition=func.extract('month',Issuance.sale_date)==months.index(match[1])+1
+    if match[2]:condition=condition & (func.extract('year',Issuance.sale_date)==int(match[2]))
+    return condition
+
 @router.get("/liquidations")
 def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=200), kind: str | None = None,
                  search: str = Query("", max_length=180), status: str | None = None, starts_on: date | None = None, ends_on: date | None = None,
@@ -510,7 +519,10 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
         if kind not in {"seller", "meta", "platform"}: raise HTTPException(422, "Tipo de liquidación inválido")
         query = query.filter(Liquidation.kind == kind)
     if status: query = query.filter(Liquidation.status == status)
-    if search:
+    month_search=liquidation_month_search(search)
+    if month_search is not None:
+        query=query.filter(db.query(Item.id).join(Issuance,Issuance.id==Item.issuance_id).filter(Item.liquidation_id==Liquidation.id,month_search).exists())
+    elif search:
         matching_insured = db.query(Item.id).join(Issuance, Issuance.id == Item.issuance_id).filter(Item.liquidation_id == Liquidation.id, or_(Issuance.customer.contains(search), Issuance.code.contains(search))).exists()
         query = query.filter(or_(Liquidation.code.contains(search), Liquidation.notes.contains(search), matching_insured))
     if kind == 'seller':
@@ -526,7 +538,8 @@ def liquidations(offset: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=2
     if include_pending and kind == 'seller':
         used = db.query(Item.issuance_id).filter(Item.active_key.like('seller:%'))
         pending = scope(db, user).filter(Issuance.status == 'issued', Issuance.test_batch.is_(None), Issuance.payment_status.in_(['pending', 'collected_by_seller']), ~Issuance.id.in_(used.scalar_subquery()))
-        pending = filtered(pending, search, starts_on, ends_on)
+        pending = filtered(pending, '' if month_search is not None else search, starts_on, ends_on)
+        if month_search is not None:pending=pending.filter(month_search)
         if status and status != 'pending': pending = pending.filter(false())
         sales_sum += pending.with_entities(func.coalesce(func.sum(Issuance.price), 0)).scalar()
         emission_order = db.query(func.max(Issuance.sale_date)).join(Item, Item.issuance_id == Issuance.id).filter(Item.liquidation_id == Liquidation.id).correlate(Liquidation).scalar_subquery()

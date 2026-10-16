@@ -70,7 +70,7 @@ class SettlementTests(unittest.TestCase):
         self.assertEqual([row['id'] for row in rows], [pending['id']])
 
     def test_unified_list_dates_pagination_and_pending_scope(self):
-        from app.models.medical import MedicalIssuance
+        from app.models.medical import MedicalIssuance,MedicalLiquidationItem
         from datetime import date
         self.setup_sale();self.voucher(55)
         pending=self.issuance(document_number='87654321')
@@ -96,6 +96,21 @@ class SettlementTests(unittest.TestCase):
         self.assertEqual(Decimal(one['sales_sum']),110)
         filtered=self.client.get(API+'/liquidations?kind=seller&include_pending=true&starts_on=2026-08-01&ends_on=2026-08-31',headers=self.headers).json()
         self.assertEqual([row['id'] for row in filtered['items']],[-pending['id']])
+        for search in ['agosto',' AGOSTO ', 'agosto de 2026','agosto 2026']:
+            result=self.client.get(API+'/liquidations',params={'kind':'seller','include_pending':True,'search':search},headers=self.headers).json()
+            self.assertEqual([row['id'] for row in result['items']],[-pending['id']])
+            self.assertEqual(result['total'],1)
+            self.assertEqual(Decimal(result['sales_sum']),55)
+        with self.sessions() as db:
+            db.get(MedicalIssuance,pending['id']).sale_date=date(2025,8,14)
+            item=db.query(MedicalLiquidationItem).filter_by(liquidation_id=self.liq['id']).one()
+            db.get(MedicalIssuance,item.issuance_id).sale_date=date(2026,8,20)
+            db.commit()
+        result=self.client.get(API+'/liquidations',params={'kind':'seller','include_pending':True,'search':'agosto','limit':1},headers=self.headers).json()
+        self.assertEqual(result['total'],2);self.assertEqual(len(result['items']),1)
+        self.assertEqual(Decimal(result['sales_sum']),110)
+        result=self.client.get(API+'/liquidations',params={'kind':'seller','include_pending':True,'search':'agosto de 2026'},headers=self.headers).json()
+        self.assertEqual([row['id'] for row in result['items']],[self.liq['id']])
         _,reader=self.login('reader')
         with self.sessions() as db:
             menu=db.query(Menu).filter_by(slug='medical-liquidations').one()

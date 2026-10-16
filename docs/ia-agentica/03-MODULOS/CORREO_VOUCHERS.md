@@ -31,3 +31,14 @@ rechazo de doble reversión y permisos verificados con SQLite y SMTP simulado.
 
 La liquidación 000027 estuvo incluida en los diez correos del formato nuevo
 (intento 108, enviado); la reversión no duplica ese envío.
+
+## Búsqueda por período — 16/10/2026
+
+Liquidaciones reconoce los doce meses en español, sin distinguir mayúsculas,
+con año opcional («agosto», «agosto 2026», «agosto de 2026»). Filtra por fecha
+de emisión de las partidas, también para emisiones pendientes sin liquidación.
+No depende de notas ni de la fecha de depósito. Conserva filtros de fecha,
+permisos, paginación, totales y exportación. Prueba aislada verifica mes, año,
+pendientes, liquidaciones, total de ventas, paginación y alcance de usuario.
+Incidencia reproducida en producción: cinco emisiones de agosto, solo dos
+encontradas anteriormente por coincidencias textuales.
