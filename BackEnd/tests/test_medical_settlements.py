@@ -151,6 +151,8 @@ class SettlementTests(unittest.TestCase):
             self.assertEqual(mail.call_args.kwargs['cc'],'copy@example.com, abbisol.hampi@gmail.com')
             self.assertIn('ENVIO DE COMPROBANTE DE PAGO:',mail.call_args.args[2])
             self.assertIn(sale['customer'],mail.call_args.args[3])
+            self.assertIn('Estimados, buenos días.',mail.call_args.args[3])
+            self.assertIn('conformidad a la liquidación de esta venta.',mail.call_args.args[3])
             self.assertIn(sale['document_number'],mail.call_args.args[3])
             self.assertIn('background-color:#ffff00',mail.call_args.kwargs['html'])
             self.assertEqual(mail.call_args.kwargs['attachments'][0][1],b'%PDF-1.7 new voucher')

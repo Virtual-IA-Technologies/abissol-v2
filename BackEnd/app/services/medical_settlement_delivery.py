@@ -23,14 +23,14 @@ def message(db, settlement):
     signature=owner.display_name if owner else 'ABISSOL'
     plans=', '.join(dict.fromkeys(e.plan_name for e in entries))
     subject=f"ENVIO DE COMPROBANTE DE PAGO: {plans} ({', '.join(e.customer for e in entries)})"
-    intro=f'Estimados, buenos d?as.\nAdjunto el comprobante de pago correspondiente al seguro {plans}.'
+    intro=f'Estimados, buenos días.\nAdjunto el comprobante de pago correspondiente al seguro {plans}.'
     blocks=[];html_blocks=[]
     for e in entries:
         validity=f'{e.starts_on:%d/%m/%Y} AL {e.ends_on:%d/%m/%Y}'
         label='DNI' if e.document_type.lower() in {'dni','1','01'} else e.document_type.upper()
         blocks.append(f'DATOS DEL ASEGURADO:\nCLIENTE: {e.customer}\n{label}: {e.document_number}\nVIGENCIA: {validity}')
         html_blocks.append(f'<p><b>DATOS DEL ASEGURADO:<br>CLIENTE: {escape(e.customer)}<br>{escape(label)}: {escape(e.document_number)}<br>VIGENCIA: <span style="background-color:#ffff00">{validity}</span></b></p>')
-    closing='Por favor, esperamos respuesta de conformidad a la liquidaci?n de esta venta.'
+    closing='Por favor, esperamos respuesta de conformidad a la liquidación de esta venta.'
     text=intro+'\n\n'+'\n\n'.join(blocks)+'\n\n'+closing+'\n\nSaludos cordiales,\n'+signature
     html='<div style="font-family:Arial,sans-serif;font-size:14px;color:#333"><p>'+escape(intro).replace('\n','<br>')+'</p>'+''.join(html_blocks)+'<p>'+closing+'</p><p>Saludos cordiales,<br>'+escape(signature)+'</p></div>'
     return subject,text,html
@@ -49,7 +49,7 @@ def deliver(db, ident):
         files=[]
         for v in vouchers:
             content=(m.STORAGE/v.storage_key).read_bytes()
-            if hashlib.sha256(content).hexdigest()!=v.digest:raise ValueError('Integridad del voucher no v?lida')
+            if hashlib.sha256(content).hexdigest()!=v.digest:raise ValueError('Integridad del voucher no válida')
             mime='application/pdf' if v.filename.lower().endswith('.pdf') else 'image/png' if v.filename.lower().endswith('.png') else 'image/jpeg'
             files.append((v.filename,content,mime))
         subject,text,html=message(db,settlement)
