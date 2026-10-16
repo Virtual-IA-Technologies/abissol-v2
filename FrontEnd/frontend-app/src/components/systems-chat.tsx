@@ -91,12 +91,12 @@ function SystemsChatSession({ sidebar }: { sidebar: boolean }) {
   return <>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{sidebar ? <SidebarMenuButton tooltip="Soporte" aria-label={`Soporte${directory?.unread ? `, ${directory.unread} sin leer` : ''}`} className="h-9"><MessageCircle className="size-4" /><span>Soporte</span>{badge(directory?.unread || 0)}</SidebarMenuButton> : <Button variant="ghost" size="sm" aria-label={`Soporte${directory?.unread ? `, ${directory.unread} sin leer` : ''}`} title="Soporte"><MessageCircle className="size-4" /><span className="hidden sm:inline">Soporte</span>{badge(directory?.unread || 0)}</Button>}</PopoverTrigger>
-      <PopoverContent side={sidebar ? "right" : "bottom"} align="end" sideOffset={8} className="w-[min(340px,calc(100vw-2rem))] p-2">
+      <PopoverContent side={sidebar ? "top" : "bottom"} align={sidebar ? "start" : "end"} sideOffset={8} className={`flex max-h-[min(32rem,var(--radix-popover-content-available-height))] flex-col overflow-hidden p-2 ${sidebar ? "w-[var(--radix-popover-trigger-width)]" : "w-[min(340px,calc(100vw-2rem))]"}`}>
         <p className="px-2 py-1 text-sm font-semibold">Sistemas · Virtual IA</p>
         <Input aria-label="Buscar en Sistemas" placeholder="Buscar integrante…" value={search} onChange={event => setSearch(event.target.value)} />
         {error && <p role="alert" className="p-2 text-xs text-destructive">{error} <button type="button" className="underline" onClick={() => void refresh()}>Reintentar</button></p>}
         {!directory && !error && <p role="status" className="p-2 text-xs">Cargando Sistemas…</p>}
-        {directory && <div className="max-h-80 overflow-y-auto py-1">
+        {directory && <div className="min-h-0 max-h-80 overflow-y-auto py-1">
           <button type="button" onClick={() => choose()} className="flex w-full items-center gap-2 rounded p-2 text-left text-sm hover:bg-muted"><MessageCircle className="size-5 shrink-0" /><span className="min-w-0 flex-1 truncate">Soporte Sistemas</span>{badge(directory.general_unread)}<span className="text-[10px] text-muted-foreground">{known ? connected ? 'Conectado' : 'Desconectado' : 'Sin actualizar'}</span></button>
           {directory.operators.filter(person => person.name.toLocaleLowerCase().includes(search.toLocaleLowerCase())).map(person => <button key={person.id} type="button" onClick={() => choose(person)} className="flex w-full items-center gap-2 rounded p-2 text-left text-sm hover:bg-muted">
             {person.avatar_url ? <img src={person.avatar_url} alt="" className="size-7 shrink-0 rounded-full object-cover" /> : <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs">{person.name.slice(0, 2).toUpperCase()}</span>}
