@@ -39,14 +39,15 @@ async def submit_selected(request:Request,responsible_id:int=Form(...),issuance_
     from datetime import date
     from ..services.medical_settings import business_settings
     from ..services.email import get_smtp_setting,EmailNotConfigured
-    from ..services.medical_settlement_delivery import KIND,deliver
+    from ..services.medical_settlement_delivery import KIND,deliver,office_recipients
     try:
         ids=json.loads(issuance_ids)
         if not isinstance(ids,list) or not 1<=len(ids)<=1000 or any(type(i)!=int or i<=0 for i in ids) or len(ids)!=len(set(ids)):raise ValueError()
     except (ValueError,TypeError):raise HTTPException(422,'Selecciona las emisiones pendientes')
     settings=business_settings(db)
     if not settings['settlement_office_email']:raise HTTPException(422,'Configura el correo de Oficina Principal')
-    recipient=', '.join(dict.fromkeys(i.strip().lower() for value in [settings['settlement_office_email'],settings['settlement_office_cc']] for i in value.split(',') if i.strip()))
+    recipient=office_recipients(settings)
+    if len(recipient)>180:raise HTTPException(422,'Los destinatarios de liquidaciones exceden 180 caracteres')
     try:get_smtp_setting(db)
     except EmailNotConfigured:raise HTTPException(422,'Configura el correo SMTP antes de enviar')
     payload=SimpleNamespace(kind='seller',responsible_id=responsible_id,starts_on=date(1900,1,1),ends_on=date(2100,1,1),issuance_ids=ids)

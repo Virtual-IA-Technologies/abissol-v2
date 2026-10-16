@@ -1,5 +1,11 @@
 # Estado actual
 
+## Correo de vouchers ? 16/10/2026
+
+Formato de comprobante de pago con datos de asegurados y vigencia resaltada,
+copia autom?tica a abbisol.hampi@gmail.com y reenv?o expl?cito idempotente de
+las diez liquidaciones con voucher. [Detalle](../03-MODULOS/CORREO_VOUCHERS.md).
+
 ## Archivo por afiliado — 12/10/2026
 
 Preparada estructura Afiliados → nombre/documento → certificado, con cartas y
